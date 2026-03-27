@@ -122,8 +122,8 @@ async def scan_and_save_keys(urls: list[str]) -> list[dict]:
         logger.warning("页面扫描未找到任何密钥")
         return []
 
-    results = await gather_limited(
-        [key_service.process_key(item["key"], origin=item["url"]) for item in scan_results],
+    results = await key_service.batch_process_keys(
+        [{"key": item["key"], "origin": item["url"]} for item in scan_results],
         concurrent=10,
     )
     saved = sum(1 for r in results if r.get("saved"))

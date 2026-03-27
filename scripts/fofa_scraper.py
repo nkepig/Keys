@@ -56,9 +56,9 @@ def _write_backup(keys: list[dict]) -> Path | None:
 
 
 async def main():
-    fofa_size = 100
+    fofa_size = 1000
     scan_concurrent = 40
-    verify_concurrent = 20
+    verify_concurrent = 40
 
     try:
         hosts_openai, hosts_google = await asyncio.gather(
@@ -80,8 +80,10 @@ async def main():
             return
 
         logger.info(f"开始批量校验 {len(all_keys)} 个密钥...")
-        tasks = [key_service.process_key(item["key"], origin=item["url"]) for item in all_keys]
-        results = await gather_limited(tasks, concurrent=verify_concurrent)
+        results = await key_service.batch_process_keys(
+            [{"key": item["key"], "origin": item["url"]} for item in all_keys],
+            concurrent=verify_concurrent,
+        )
 
         saved = sum(1 for r in results if r["saved"])
         logger.success(

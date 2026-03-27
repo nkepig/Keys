@@ -6,10 +6,17 @@
   <title>登录 · API Key 控制台</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="min-h-screen font-sans bg-slate-100 flex items-center justify-center p-6">
-  <div class="w-full max-w-sm bg-white/80 backdrop-blur rounded-2xl shadow-lg shadow-slate-200/60 border border-white/80 p-8">
-    <h1 class="text-lg font-bold text-gray-900 mb-1">API Key 控制台</h1>
-    <p class="text-xs text-gray-500 mb-6">请输入访问密码</p>
+<body class="min-h-screen font-sans text-gray-700 flex items-center justify-center p-6" style="background:linear-gradient(150deg,#f4f5f7 0%,#eef0f2 50%,#f0f2f4 100%); background-attachment:fixed;">
+  <div class="w-full max-w-sm bg-white/72 backdrop-blur-md rounded-2xl shadow-lg shadow-slate-200/60 border border-white/80 p-8">
+    <div class="flex items-center gap-3 mb-6">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center shadow-lg shadow-slate-700/30">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><path d="M2 18v3c0 .6.4 1 1 1h4v-3h3v-3h2l1.4-1.4a6.5 6.5 0 1 0-4-4Z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></svg>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-800 leading-none">API Key 控制台</h1>
+        <p class="text-xs text-slate-500 mt-1">请输入访问密码</p>
+      </div>
+    </div>
     {% if error %}
     <p class="text-sm text-red-600 mb-4 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{{ error }}</p>
     {% endif %}

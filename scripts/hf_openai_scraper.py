@@ -115,8 +115,8 @@ async def main():
             logger.success(f"✅ 本轮找到 {len(unique_keys)} 个唯一密钥")
 
             if unique_keys:
-                results = await gather_limited(
-                    [key_service.process_key(k, origin="huggingface") for k in unique_keys],
+                results = await key_service.batch_process_keys(
+                    [{"key": k, "origin": "huggingface"} for k in unique_keys],
                     concurrent=10,
                 )
                 saved = sum(1 for r in results if r.get("saved"))

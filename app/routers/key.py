@@ -59,8 +59,9 @@ async def list_keys():
 
 @api_router.post("/keys", status_code=201)
 async def create_key(body: KeyCreate):
-    result = await key_service.process_key(body.key, origin=body.origin)
-    if not result["saved"]:
+    results = await key_service.batch_process_keys([{"key": body.key, "origin": body.origin}])
+    result = results[0] if results else {}
+    if not result.get("saved"):
         raise HTTPException(status_code=400, detail=result.get("error", "保存失败"))
     return result
 
