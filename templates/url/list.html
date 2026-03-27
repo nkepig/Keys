@@ -1,0 +1,51 @@
+{% extends "layout/base.html" %}
+
+{% block title %}URLs — Key Manager{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-2xl font-bold text-gray-800">API URLs</h1>
+  <button
+    onclick="document.getElementById('add-url-modal').classList.remove('hidden')"
+    class="bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors">
+    + 添加 URL
+  </button>
+</div>
+
+<div id="url-table" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto">
+  {% include "components/url_table.html" %}
+</div>
+
+<!-- 添加 URL 弹窗 -->
+<div id="add-url-modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+    <div class="flex items-center justify-between mb-5">
+      <h2 class="text-lg font-semibold text-gray-800">添加 URL</h2>
+      <button onclick="document.getElementById('add-url-modal').classList.add('hidden')"
+        class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+    </div>
+    <form
+      hx-post="/urls/"
+      hx-target="#url-table"
+      hx-on::after-request="document.getElementById('add-url-modal').classList.add('hidden'); this.reset()"
+      class="space-y-4">
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">URL *</label>
+        <input name="url" required placeholder="https://api.example.com/v1"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+      </div>
+      <div class="flex justify-end gap-3 pt-1">
+        <button type="button"
+          onclick="document.getElementById('add-url-modal').classList.add('hidden')"
+          class="text-sm px-4 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">
+          取消
+        </button>
+        <button type="submit"
+          class="text-sm px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+          保存
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

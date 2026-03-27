@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>登录 · API Key 控制台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen font-sans bg-slate-100 flex items-center justify-center p-6">
+  <div class="w-full max-w-sm bg-white/80 backdrop-blur rounded-2xl shadow-lg shadow-slate-200/60 border border-white/80 p-8">
+    <h1 class="text-lg font-bold text-gray-900 mb-1">API Key 控制台</h1>
+    <p class="text-xs text-gray-500 mb-6">请输入访问密码</p>
+    {% if error %}
+    <p class="text-sm text-red-600 mb-4 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{{ error }}</p>
+    {% endif %}
+    <form method="post" action="/login" class="space-y-4">
+      {% if next %}
+      <input type="hidden" name="next" value="{{ next }}" />
+      {% endif %}
+      <input type="password" name="password" required autocomplete="current-password" placeholder="密码"
+             class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-400 focus:border-transparent outline-none text-sm" />
+      <button type="submit"
+              class="w-full py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold shadow-md shadow-blue-500/25 hover:from-blue-700 hover:to-indigo-700 transition">
+        进入
+      </button>
+    </form>
+  </div>
+</body>
+</html>

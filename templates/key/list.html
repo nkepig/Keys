@@ -1,0 +1,1432 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>API Key 控制台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    [v-cloak] { display: none; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    /* ── Modal 过渡 ─────────────────────────────────── */
+    .modal-enter-active, .modal-leave-active { transition: opacity 0.25s ease, transform 0.25s ease; }
+    .modal-enter-from, .modal-leave-to { opacity: 0; transform: scale(0.95) translateY(-10px); }
+
+    .ic svg { width: 15px; height: 15px; }
+
+    /* ── 状态呼吸动画（鲜亮版）──────────────────── */
+    @keyframes breathe-green {
+      0%,100% { box-shadow: 0 0 0 0 rgba(22,163,74,.5); }
+      50%      { box-shadow: 0 0 0 5px rgba(22,163,74,0); }
+    }
+    @keyframes breathe-red {
+      0%,100% { box-shadow: 0 0 0 0 rgba(220,38,38,.45); }
+      50%      { box-shadow: 0 0 0 4px rgba(220,38,38,0); }
+    }
+    @keyframes breathe-orange {
+      0%,100% { box-shadow: 0 0 0 0 rgba(234,88,12,.42); }
+      50%      { box-shadow: 0 0 0 4px rgba(234,88,12,0); }
+    }
+    @keyframes breathe-amber {
+      0%,100% { box-shadow: 0 0 0 0 rgba(217,119,6,.42); }
+      50%      { box-shadow: 0 0 0 4px rgba(217,119,6,0); }
+    }
+    .status-valid   { animation: breathe-green  2.6s ease-in-out infinite; }
+    .status-invalid { animation: breathe-red    2.3s ease-in-out infinite; }
+    .status-quota   { animation: breathe-amber  2.3s ease-in-out infinite; }
+    .status-forbid  { animation: breathe-orange 2.6s ease-in-out infinite; }
+
+    /* ── 刷新旋转 ────────────────────────────────── */
+    @keyframes spin-ease { to { transform: rotate(360deg); } }
+    .spin { animation: spin-ease .7s linear infinite; }
+
+    /* ── 刷新按钮成功闪光 ─────────────────────── */
+    @keyframes refresh-done {
+      0%   { box-shadow: 0 0 0 0 rgba(34,197,94,.55); }
+      60%  { box-shadow: 0 0 0 6px rgba(34,197,94,0); }
+      100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+    }
+    .refresh-done { animation: refresh-done .7s ease-out forwards; }
+
+    /* ── Key 单元格复制闪烁 ─────────────────────── */
+    @keyframes cell-flash {
+      0%   { background-color: rgba(51,65,85,.14); border-color: rgba(51,65,85,.35); }
+      100% { background-color: transparent; border-color: transparent; }
+    }
+    .cell-flash { animation: cell-flash .55s ease-out forwards; }
+
+    /* ── 折叠动画 ────────────────────────────────── */
+    .collapse-enter-active, .collapse-leave-active {
+      transition: max-height .3s ease, opacity .25s ease;
+      overflow: hidden;
+    }
+    .collapse-enter-from, .collapse-leave-to { max-height: 0; opacity: 0; }
+    .collapse-enter-to, .collapse-leave-from { max-height: 500px; opacity: 1; }
+
+    /* ── 表格固定布局（防抖动核心）─────────────── */
+    .key-table {
+      table-layout: fixed;
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    /* ── 表格行（斑马纹 + 银灰悬停）──────────── */
+    .row-item {
+      transition: background-color .18s ease-in-out, box-shadow .18s ease-in-out;
+      height: 46px;
+    }
+    .row-item:nth-child(even) {
+      background-color: rgba(241,242,244,.40);
+    }
+    .row-item:hover {
+      background-color: rgba(228,230,235,.55) !important;
+      box-shadow: inset 3px 0 0 rgba(71,85,105,.50);
+    }
+    .row-item td { overflow: hidden; }
+    .row-item td:first-child {
+      transition: padding-left .18s ease-in-out;
+    }
+    .row-item:hover td:first-child {
+      padding-left: 16px;
+    }
+
+    /* ── 排序/刷新级联动画（TransitionGroup FLIP + stagger）── */
+    .row-move {
+      transition: transform 0.44s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    /* 用 animation 而非 transition，以支持 animation-delay 错开 */
+    @keyframes row-cascade-in {
+      from { opacity: 0; transform: translateY(-7px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .row-enter-active {
+      animation: row-cascade-in 0.32s cubic-bezier(0.22,1,0.36,1) both;
+      animation-delay: calc(var(--row-i, 0) * 22ms);
+    }
+    .row-leave-active { transition: opacity 0.15s ease; }
+    .row-leave-to { opacity: 0; }
+
+    /* ── 页码切换淡入 ────────────────────────── */
+    @keyframes page-in {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .page-fade-enter-active { animation: page-in .2s ease forwards; }
+    .page-fade-leave-active { transition: opacity .1s ease; position: absolute; width: 100%; }
+    .page-fade-leave-to { opacity: 0; }
+
+    /* ── 工具栏按钮涟漪 ─────────────────────── */
+    .toolbar-btn { position: relative; overflow: hidden; }
+    .toolbar-btn::after {
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(circle, rgba(51,65,85,.10) 0%, transparent 70%);
+      opacity: 0; transition: opacity .25s ease; pointer-events: none;
+    }
+    .toolbar-btn:hover::after { opacity: 1; }
+
+    /* ── 操作按钮呼吸缩放感 ─────────────────── */
+    .action-btn {
+      transition: background-color .18s ease-in-out,
+                  transform .2s cubic-bezier(.34,1.56,.64,1),
+                  opacity .18s ease;
+    }
+    .action-btn:hover:not(:disabled) { transform: scale(1.15); }
+    .action-btn:active:not(:disabled) { transform: scale(0.92); }
+
+    /* ── 主按钮悬停上浮 ────────────────────── */
+    .btn-lift {
+      transition: all .22s ease-in-out;
+    }
+    .btn-lift:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 18px rgba(30,41,59,.18);
+    }
+    .btn-lift:active:not(:disabled) { transform: translateY(0); }
+
+    /* ── 全局 Tooltip（fixed 定位，不受 overflow 裁剪）── */
+    .g-tooltip {
+      position: fixed;
+      z-index: 9999;
+      pointer-events: none;
+      max-width: 290px;
+      word-break: break-all;
+      background: rgba(25,30,48,.92);
+      color: #dde1ec;
+      font-size: 11px;
+      line-height: 1.6;
+      padding: 5px 11px;
+      border-radius: 8px;
+      font-family: ui-monospace, 'SF Mono', monospace;
+      transform: translate(-50%, calc(-100% - 8px));
+      transition: opacity .18s ease, transform .18s ease;
+      white-space: pre-wrap;
+    }
+    .g-tooltip-hidden {
+      opacity: 0;
+      transform: translate(-50%, calc(-100% - 4px));
+    }
+
+    /* ── 表格刷新遮罩（blur 柔和过渡）──── */
+    .table-refresh-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(246,247,249,.60);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+    .refresh-overlay-enter-active { transition: opacity .22s ease; }
+    .refresh-overlay-leave-active { transition: opacity .38s ease; }
+    .refresh-overlay-enter-from,
+    .refresh-overlay-leave-to    { opacity: 0; }
+
+    /* ── input / select 过渡 ─────────────── */
+    input, select, textarea {
+      transition: box-shadow .18s ease, background-color .18s ease;
+    }
+  </style>
+</head>
+<body class="min-h-screen font-sans text-gray-700" style="background:linear-gradient(150deg,#f4f5f7 0%,#eef0f2 50%,#f0f2f4 100%); background-attachment:fixed;">
+
+<div id="app" v-cloak class="p-6 md:p-10 max-w-screen-2xl mx-auto">
+
+  <!-- ── 头部 ─────────────────────────────────────────── -->
+  <header class="mb-8">
+    <div class="inline-flex items-center gap-4 bg-white/72 backdrop-blur-md border border-white/80 shadow-sm rounded-2xl px-6 py-4">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center shadow-lg shadow-slate-700/30">
+        <i data-lucide="key-round" class="w-5 h-5 text-white"></i>
+      </div>
+      <div>
+        <h1 class="text-xl font-extrabold text-slate-800 tracking-tight leading-none">API Key 控制台</h1>
+        <p class="text-slate-400 text-xs mt-0.5">管理、监控与分发您的模型调用凭证</p>
+      </div>
+      <!-- 统计胶囊 -->
+      <div class="hidden md:flex items-center gap-3 ml-6 pl-6 border-l border-slate-100">
+        <div class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span class="text-xs text-slate-500">有效 <span class="font-bold text-emerald-600">[[ validCount ]]</span></span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-red-500"></span>
+          <span class="text-xs text-slate-500">401/403 <span class="font-bold text-red-500">[[ invalidCount ]]</span></span>
+        </div>
+        <button type="button" @click="doLogout"
+                class="ml-2 text-xs text-slate-400 hover:text-slate-800 transition underline-offset-2 hover:underline">
+          退出
+        </button>
+        <div class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-slate-300"></span>
+          <span class="text-xs text-slate-500">总计 <span class="font-bold text-slate-700">[[ keys.length ]]</span></span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── 工具栏 ──────────────────────────────────────── -->
+  <div class="flex flex-col md:flex-row justify-between items-center gap-3 mb-5">
+    <div class="flex w-full md:w-auto gap-2.5 flex-wrap items-center">
+      <!-- 搜索 -->
+      <div class="relative w-full md:w-72">
+        <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none"></i>
+        <input v-model="searchQuery" type="text" placeholder="搜索密钥 / 来源 / 备注…"
+               class="w-full pl-9 pr-4 py-2.5 rounded-xl focus:ring-2 focus:ring-slate-400 outline-none text-sm bg-white/72 backdrop-blur-sm shadow-sm ring-1 ring-black/5 focus:bg-white" />
+      </div>
+      <!-- Provider 筛选 -->
+      <select v-model="providerFilter"
+              class="px-3 py-2.5 rounded-xl text-sm bg-white/72 backdrop-blur-sm shadow-sm ring-1 ring-black/5 focus:ring-2 focus:ring-slate-400 outline-none cursor-pointer hover:bg-white">
+        <option value="all">全部供应商</option>
+        <option v-for="p in providerOptions" :key="p" :value="p">[[ p ]]</option>
+      </select>
+      <!-- 状态码筛选（已移除"未验证"选项）-->
+      <select v-model="statusFilter"
+              class="px-3 py-2.5 rounded-xl text-sm bg-white/72 backdrop-blur-sm shadow-sm ring-1 ring-black/5 focus:ring-2 focus:ring-slate-400 outline-none cursor-pointer hover:bg-white">
+        <option value="all">全部状态</option>
+        <option value="200">200 · 有效</option>
+        <option value="401">401 · 未授权</option>
+        <option value="403">403 · 禁止</option>
+        <option value="429">429 · 限额</option>
+        <option value="other">其他</option>
+      </select>
+      <!-- 刷新（带文字 + 颜色状态 + 完成闪光）-->
+      <button @click="doRefresh" :disabled="loading"
+              :class="[
+                loading
+                  ? 'bg-slate-100 text-slate-500 ring-slate-200 cursor-wait'
+                  : refreshDone
+                    ? 'bg-emerald-50 text-emerald-600 ring-emerald-200 refresh-done'
+                    : 'bg-white/72 text-slate-600 ring-black/5 hover:bg-white hover:text-slate-900 hover:ring-slate-300',
+                'toolbar-btn btn-lift flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl shadow-sm ring-1 text-sm font-medium transition-all'
+              ]">
+        <svg :class="loading?'spin':''" class="w-4 h-4 shrink-0" xmlns="http://www.w3.org/2000/svg"
+             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+          <path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>
+        </svg>
+        <span class="hidden sm:inline">[[ loading ? '刷新中…' : refreshDone ? '已刷新 ✓' : '刷新' ]]</span>
+      </button>
+    </div>
+    <div class="flex w-full md:w-auto gap-2.5">
+      <button @click="openUploadModal"
+              class="toolbar-btn btn-lift flex-1 md:flex-none bg-white/72 backdrop-blur-sm ring-1 ring-black/5 hover:bg-white hover:ring-slate-300 text-slate-600 hover:text-slate-900 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-sm text-sm font-medium">
+        <i data-lucide="upload-cloud" class="w-4 h-4"></i> 批量上传
+      </button>
+      <button @click="openModal(false)"
+              class="btn-lift flex-1 md:flex-none bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-md shadow-slate-700/25 text-sm font-medium">
+        <i data-lucide="plus" class="w-4 h-4"></i> 新增密钥
+      </button>
+    </div>
+  </div>
+
+  <!-- ── 表格 ──────────────────────────────────────────── -->
+  <div class="bg-white/65 backdrop-blur-md rounded-2xl shadow-md shadow-slate-200/40 overflow-hidden">
+    <div class="overflow-x-auto no-scrollbar relative">
+      <!-- 刷新遮罩：仅在「有旧数据时刷新」时叠加，不影响布局 -->
+      <transition name="refresh-overlay">
+        <div v-if="loading && keys.length > 0" class="table-refresh-overlay">
+          <div class="w-6 h-6 border-[2px] border-slate-400 border-t-transparent rounded-full animate-spin opacity-70"></div>
+        </div>
+      </transition>
+
+      <table class="key-table text-left text-sm text-slate-600">
+        <!-- 固定列宽，彻底消除抖动 -->
+        <colgroup>
+          <col style="width:52px">
+          <col style="width:98px">
+          <col style="width:202px">
+          <col style="width:150px">
+          <col style="width:78px">
+          <col style="width:148px">
+          <col style="width:74px">
+          <col style="width:130px">
+          <col style="width:100px">
+        </colgroup>
+
+        <thead class="bg-slate-50/80 text-slate-400 border-b border-slate-100/80 text-xs tracking-wider uppercase select-none">
+          <tr>
+            <th class="px-3 py-3 font-semibold cursor-pointer hover:text-slate-600 transition-colors" @click="toggleSort('id')">
+              <span class="flex items-center gap-1">ID <span class="inline-flex w-3 h-3 shrink-0" v-html="sortSvg('id')"></span></span>
+            </th>
+            <th class="px-3 py-3 font-semibold cursor-pointer hover:text-slate-600 transition-colors" @click="toggleSort('provider')">
+              <span class="flex items-center gap-1">供应商 <span class="inline-flex w-3 h-3 shrink-0" v-html="sortSvg('provider')"></span></span>
+            </th>
+            <th class="px-3 py-3 font-semibold cursor-pointer hover:text-slate-600 transition-colors" @click="toggleSort('key')">
+              <span class="flex items-center gap-1">API Key <span class="inline-flex w-3 h-3 shrink-0" v-html="sortSvg('key')"></span></span>
+            </th>
+            <th class="px-3 py-3 font-semibold cursor-pointer hover:text-slate-600 transition-colors" @click="toggleSort('origin')">
+              <span class="flex items-center gap-1">来源 <span class="inline-flex w-3 h-3 shrink-0" v-html="sortSvg('origin')"></span></span>
+            </th>
+            <th class="px-3 py-3 font-semibold cursor-pointer hover:text-slate-600 transition-colors" @click="toggleSort('tier')">
+              <span class="flex items-center gap-1">等级 <span class="inline-flex w-3 h-3 shrink-0" v-html="sortSvg('tier')"></span></span>
+            </th>
+            <th class="px-3 py-3 font-semibold cursor-pointer hover:text-slate-600 transition-colors" @click="toggleSort('status_code')">
+              <span class="flex items-center gap-1">状态 / 备注 <span class="inline-flex w-3 h-3 shrink-0" v-html="sortSvg('status_code')"></span></span>
+            </th>
+            <th class="px-3 py-3 font-semibold cursor-pointer hover:text-slate-600 transition-colors" @click="toggleSort('models')">
+              <span class="flex items-center gap-1">模型 <span class="inline-flex w-3 h-3 shrink-0" v-html="sortSvg('models')"></span></span>
+            </th>
+            <th class="px-3 py-3 font-semibold cursor-pointer hover:text-slate-600 transition-colors" @click="toggleSort('create_time')">
+              <span class="flex items-center gap-1">创建时间 <span class="inline-flex w-3 h-3 shrink-0" v-html="sortSvg('create_time')"></span></span>
+            </th>
+            <th class="px-2 py-3 font-semibold text-center">操作</th>
+          </tr>
+        </thead>
+
+        <!-- 首次加载（还没有任何数据）才显示全屏 spinner -->
+        <tbody v-if="loading && keys.length === 0">
+          <tr>
+            <td colspan="9" class="py-24 text-center text-slate-400">
+              <div class="flex flex-col items-center gap-3">
+                <div class="w-8 h-8 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div>
+                <span class="text-sm text-slate-400">加载中…</span>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+
+        <!-- 空态 -->
+        <tbody v-else-if="!loading && paginatedDisplayRows.length === 0">
+          <tr>
+            <td colspan="9" class="py-20 text-center">
+              <div class="flex flex-col items-center gap-3 text-slate-400">
+                <div class="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center">
+                  <i data-lucide="search-x" class="w-8 h-8 opacity-40"></i>
+                </div>
+                <p class="text-sm font-medium">没有找到符合条件的 API Key</p>
+                <p class="text-xs text-slate-300">尝试修改搜索条件或添加新密钥</p>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+
+        <!-- ── 数据行（刷新时保持可见，遮罩叠在上方）── -->
+        <transition-group v-else-if="paginatedDisplayRows.length > 0" name="row" tag="tbody">
+          <tr v-for="(item, index) in paginatedDisplayRows"
+              :key="`r${refreshCount}_${item.id}`"
+              :style="{ '--row-i': index }"
+              class="row-item group">
+
+            <td class="px-3 py-2 text-slate-400 text-xs font-mono">[[ item.id ]]</td>
+
+            <!-- 供应商 -->
+            <td class="px-3 py-2">
+              <div class="flex items-center gap-1.5 truncate">
+                <span class="w-1.5 h-1.5 rounded-full shrink-0" :class="providerDot(item.provider)"></span>
+                <span class="font-semibold text-slate-700 text-sm truncate">[[ item.provider ]]</span>
+              </div>
+            </td>
+
+            <!-- Key（点击复制完整 key）-->
+            <td class="px-3 py-2">
+              <div class="flex items-center gap-1">
+                <code @click.stop="copyCell(item.key, item.id)"
+                      :class="copiedKey===item.id ? 'cell-flash' : 'hover:bg-slate-100 hover:border-slate-300 hover:text-slate-600'"
+                      class="bg-slate-50 px-2 py-0.5 rounded-md text-slate-500 font-mono text-xs border border-slate-100 cursor-pointer transition-all select-none block truncate max-w-full"
+                      title="点击复制">
+                  [[ maskKey(item.key) ]]
+                </code>
+                <span v-if="copiedKey===item.id" class="text-slate-400 text-[10px] font-semibold shrink-0">✓</span>
+              </div>
+            </td>
+
+            <!-- 来源列：截断 + 全局 Tooltip -->
+            <td class="px-3 py-2"
+                @mouseenter="showTooltipAt($event, item.origin)"
+                @mouseleave="hideTooltip">
+              <a v-if="isUrl(item.origin)" :href="item.origin" target="_blank"
+                 @click.stop class="text-blue-400/90 hover:text-blue-500 text-xs font-mono truncate block transition-colors">
+                [[ truncateUrl(item.origin) ]]
+              </a>
+              <span v-else-if="item.origin" class="text-xs text-slate-500 truncate block">[[ item.origin ]]</span>
+              <span v-else class="text-slate-300 text-xs">—</span>
+            </td>
+
+            <!-- 等级 -->
+            <td class="px-3 py-2">
+              <span v-if="item.tier" :class="tierBadgeClass(item.tier)"
+                    class="px-1.5 py-0.5 rounded text-xs font-semibold border whitespace-nowrap">
+                [[ formatTier(item.tier, item.provider) ]]
+              </span>
+              <span v-else class="text-slate-300 text-xs">—</span>
+            </td>
+
+            <!-- 状态码 + 备注 -->
+            <td class="px-3 py-2">
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <span :class="statusCodeClass(item.status_code)"
+                      class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-mono font-semibold border leading-5 whitespace-nowrap">
+                  [[ item.status_code ?? '—' ]]
+                </span>
+                <span v-if="item.notes" class="text-xs text-slate-400 max-w-[90px] truncate" :title="item.notes">
+                  [[ item.notes ]]
+                </span>
+              </div>
+            </td>
+
+            <!-- 模型数量 -->
+            <td class="px-3 py-2">
+              <button v-if="modelsCount(item.models) > 0"
+                      @click.stop="openModelsModal(item)"
+                      class="px-1.5 py-0.5 rounded text-xs font-medium bg-teal-50/80 text-teal-600 border border-teal-100/80 hover:bg-teal-100 transition-colors whitespace-nowrap">
+                [[ modelsCount(item.models) ]] 个
+              </button>
+              <span v-else class="text-slate-300 text-xs">—</span>
+            </td>
+
+            <!-- 创建时间 -->
+            <td class="px-3 py-2 text-xs text-slate-400 font-mono whitespace-nowrap">
+              [[ formatTime(item.create_time) ]]
+            </td>
+
+            <!-- 操作按钮（并发校验：verifyingMap）-->
+            <td class="px-2 py-2">
+              <div class="flex items-center justify-center gap-1 opacity-40 group-hover:opacity-100 transition-opacity duration-200">
+                <!-- 校验（支持同时多个并发）-->
+                <button @click="verifyKey(item)" :disabled="verifyingMap[item.id]"
+                        :class="verifyingMap[item.id]
+                          ? 'text-blue-400 cursor-wait bg-blue-50/60'
+                          : 'text-[#5a9a78] hover:bg-[#e8f4ee]'"
+                        class="action-btn ic w-7 h-7 flex items-center justify-center rounded-full" title="校验">
+                  <div v-if="verifyingMap[item.id]"
+                       class="w-[13px] h-[13px] border-[1.8px] border-blue-400 border-t-transparent rounded-full animate-spin">
+                  </div>
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                       stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>
+                  </svg>
+                </button>
+                <!-- 编辑 -->
+                <button @click="openModal(true, item)"
+                        class="action-btn ic w-7 h-7 flex items-center justify-center text-blue-400/80 hover:bg-blue-50 rounded-full" title="编辑">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                       stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                </button>
+                <!-- 删除 -->
+                <button @click="deleteKey(item.id)"
+                        class="action-btn ic w-7 h-7 flex items-center justify-center text-rose-400/70 hover:bg-rose-50 hover:text-rose-500 rounded-full" title="删除">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                       stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                    <path d="M10 11v6M14 11v6"/>
+                    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                  </svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+        </transition-group>
+      </table>
+    </div>
+
+    <!-- 分页 -->
+    <div v-if="!loading && processedKeys.length > 0"
+         class="px-5 py-3.5 border-t border-slate-100/50 bg-white/20 flex flex-col md:flex-row items-center justify-between gap-3">
+      <div class="flex items-center gap-3 text-sm text-slate-400">
+        <span>共 <span class="font-semibold text-slate-600">[[ processedKeys.length ]]</span> 条</span>
+        <span class="text-slate-200">|</span>
+        <span>第 [[ (currentPage-1)*pageSize+1 ]]–[[ Math.min(currentPage*pageSize, processedKeys.length) ]] 条</span>
+        <span class="text-slate-200">|</span>
+        <span class="flex items-center gap-1.5">
+          每页
+          <select v-model="pageSize"
+                  class="px-2 py-0.5 rounded-lg text-xs bg-white/80 shadow-sm ring-1 ring-black/5 focus:ring-slate-400 outline-none cursor-pointer hover:bg-white">
+            <option :value="20">20</option>
+            <option :value="50">50</option>
+            <option :value="100">100</option>
+            <option :value="200">200</option>
+          </select>
+          条
+        </span>
+      </div>
+      <div class="flex gap-1">
+        <button @click="currentPage--" :disabled="currentPage===1"
+                class="btn-lift px-3 py-1.5 rounded-lg bg-white/80 shadow-sm ring-1 ring-black/5 disabled:opacity-30 hover:bg-white hover:shadow text-sm">上一页</button>
+        <template v-for="p in displayPages" :key="p">
+          <button @click="typeof p==='number' && (currentPage=p)"
+                  :class="[p===currentPage?'bg-slate-600 text-white shadow-md shadow-slate-300':'bg-white/80 text-slate-500 ring-1 ring-black/5 hover:bg-white hover:shadow',
+                           typeof p!=='number'?'cursor-default pointer-events-none !bg-transparent !shadow-none !ring-0 text-slate-300':'']"
+                  class="min-w-[34px] px-2.5 py-1.5 rounded-lg shadow-sm transition text-sm font-medium btn-lift">[[ p ]]</button>
+        </template>
+        <button @click="currentPage++" :disabled="currentPage===totalPages"
+                class="btn-lift px-3 py-1.5 rounded-lg bg-white/80 shadow-sm ring-1 ring-black/5 disabled:opacity-30 hover:bg-white hover:shadow text-sm">下一页</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 新增 / 编辑 Modal ══════════════════════════════ -->
+  <transition name="modal">
+    <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div class="absolute inset-0 bg-slate-900/45 backdrop-blur-md" @click="showModal=false"></div>
+      <div class="relative bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl w-full max-w-lg border border-white/60 flex flex-col max-h-[90vh]">
+        <div class="px-6 py-5 border-b border-slate-100 flex justify-between items-center">
+          <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+            <span class="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center">
+              <i :data-lucide="isEditing?'settings-2':'plus'" class="w-4 h-4 text-slate-600"></i>
+            </span>
+            [[ isEditing ? '编辑 API 凭证' : '录入新凭证' ]]
+          </h2>
+          <button @click="showModal=false" class="action-btn w-7 h-7 flex items-center justify-center text-slate-400 hover:bg-slate-100 rounded-lg">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+        <div class="p-6 space-y-4 overflow-y-auto no-scrollbar">
+          <div v-if="isEditing">
+            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">供应商</label>
+            <input v-model="form.provider" type="text" placeholder="OpenAI / Anthropic / Google…"
+                   class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-400 focus:bg-white outline-none text-sm"/>
+          </div>
+          <div v-else class="text-xs text-slate-600 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 flex items-center gap-2">
+            <i data-lucide="info" class="w-3.5 h-3.5 shrink-0 text-slate-400"></i>
+            供应商将根据密钥格式自动识别，并同时校验有效性和等级
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">密钥 <span class="text-rose-400">*</span></label>
+            <input v-model="form.key" type="text" placeholder="sk-…"
+                   class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-400 focus:bg-white outline-none font-mono text-sm"/>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">来源 URL</label>
+            <input v-model="form.origin" type="text" placeholder="https://api.example.com 或描述性文字"
+                   class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-400 focus:bg-white outline-none text-sm"/>
+          </div>
+          <div v-if="isEditing">
+            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">等级</label>
+            <select v-model="form.tier"
+                    class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-400 focus:bg-white outline-none text-sm cursor-pointer">
+              <option value="">未指定</option>
+              <option v-for="n in 5" :key="n" :value="String(n)">Tier [[ n ]]</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">备注</label>
+            <textarea v-model="form.notes" rows="2" placeholder="其他信息等…"
+                      class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-400 focus:bg-white outline-none resize-none text-sm"></textarea>
+          </div>
+        </div>
+        <div class="px-6 py-4 border-t border-slate-100 flex justify-end gap-3">
+          <button @click="showModal=false" class="action-btn px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-xl font-medium">取消</button>
+          <button @click="saveKey" class="btn-lift px-5 py-2 text-sm bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-semibold shadow-lg shadow-slate-700/20">
+            [[ isEditing ? '保存修改' : '确认添加' ]]
+          </button>
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- ══ 批量上传 Modal ══════════════════════════════════ -->
+  <transition name="modal">
+    <div v-if="showUploadModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div class="absolute inset-0 bg-slate-900/45 backdrop-blur-md" @click="closeUploadModal"></div>
+      <div class="relative bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl w-full max-w-2xl border border-white/60 flex flex-col max-h-[92vh]">
+
+        <div class="px-6 py-5 border-b border-slate-100 flex justify-between items-center shrink-0">
+          <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+            <span class="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center">
+              <i data-lucide="upload-cloud" class="w-4 h-4 text-slate-600"></i>
+            </span>
+            批量上传 API Keys
+          </h2>
+          <button @click="closeUploadModal" :disabled="uploading"
+                  class="action-btn w-7 h-7 flex items-center justify-center text-slate-400 hover:bg-slate-100 rounded-lg disabled:opacity-40">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+
+        <!-- Phase 1: 输入 -->
+        <template v-if="uploadPhase==='input'">
+          <div class="p-6 space-y-4 overflow-y-auto no-scrollbar flex-1">
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                  Keys <span class="text-slate-400 font-normal normal-case tracking-normal">（一行一个，自动识别供应商）</span>
+                </label>
+                <span class="text-xs text-slate-400">[[ uploadLineCount ]] 行</span>
+              </div>
+              <textarea v-model="uploadForm.keys" rows="10"
+                        placeholder="sk-proj-abc123...&#10;sk-ant-api01-xyz...&#10;AIzaSyA1B2C3..."
+                        class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-400 focus:bg-white outline-none resize-none text-sm font-mono"></textarea>
+              <div v-if="uploadDupCount > 0" class="mt-2 flex items-center gap-2 text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                <i data-lucide="alert-triangle" class="w-3.5 h-3.5 shrink-0"></i>
+                检测到 <strong>[[ uploadDupCount ]]</strong> 行重复，上传时将自动过滤（实际校验 <strong>[[ uploadLineCount - uploadDupCount ]]</strong> 个）
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">来源 URL（可选，统一附加）</label>
+              <input v-model="uploadForm.origin" type="text" placeholder="https://api.example.com"
+                     class="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-400 focus:bg-white outline-none text-sm"/>
+            </div>
+          </div>
+          <div class="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+            <button @click="closeUploadModal" class="action-btn px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-xl font-medium">关闭</button>
+            <button @click="doUpload" :disabled="!uploadForm.keys.trim()"
+                    class="btn-lift px-5 py-2 text-sm bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-semibold shadow-md shadow-slate-700/20 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none">
+              开始上传
+            </button>
+          </div>
+        </template>
+
+        <!-- Phase 2: 校验中 -->
+        <template v-if="uploadPhase==='uploading'">
+          <div class="flex-1 flex flex-col items-center justify-center p-10 gap-6">
+            <div class="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center">
+              <div class="w-8 h-8 border-[3px] border-slate-500 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+            <div class="text-center">
+              <p class="font-semibold text-slate-700 text-base">正在识别并校验密钥…</p>
+              <p class="text-sm text-slate-400 mt-1">共 [[ uploadingTotal ]] 个，请耐心等待</p>
+            </div>
+            <div class="w-full max-w-xs">
+              <div class="flex justify-between text-xs text-slate-400 mb-1.5">
+                <span>进度</span>
+                <span>[[ Math.round(uploadProgress) ]]%</span>
+              </div>
+              <div class="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div class="h-full rounded-full transition-all duration-300 ease-out"
+                     style="background: linear-gradient(to right, #6b7ea8, #8b9bc8);"
+                     :style="{ width: uploadProgress + '%' }"></div>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- Phase 3: 结果 -->
+        <template v-if="uploadPhase==='done' && uploadResults">
+          <div class="flex-1 overflow-y-auto no-scrollbar">
+            <div class="p-6 pb-0">
+              <div class="grid grid-cols-4 gap-3 mb-5">
+                <div class="bg-slate-50 border border-slate-100 rounded-xl p-3 text-center">
+                  <p class="text-xl font-bold text-slate-700">[[ uploadResults.total ]]</p>
+                  <p class="text-xs text-slate-500 mt-0.5">校验</p>
+                </div>
+                <div class="bg-[#eef8f2] border border-[#d0e8da] rounded-xl p-3 text-center">
+                  <p class="text-xl font-bold text-[#4a8c6a]">[[ uploadResults.saved ]]</p>
+                  <p class="text-xs text-[#6aaa88] mt-0.5">成功</p>
+                </div>
+                <div class="bg-[#fdf2f2] border border-[#e8d0d0] rounded-xl p-3 text-center">
+                  <p class="text-xl font-bold text-[#a05050]">[[ uploadResults.failed ]]</p>
+                  <p class="text-xs text-[#b87070] mt-0.5">失败</p>
+                </div>
+                <div class="bg-[#fdf8ee] border border-[#e8d8b8] rounded-xl p-3 text-center">
+                  <p class="text-xl font-bold text-[#9a8030]">[[ uploadFiltered.length ]]</p>
+                  <p class="text-xs text-[#b09848] mt-0.5">去重</p>
+                </div>
+              </div>
+
+              <!-- 折叠：成功 -->
+              <div v-if="successResults.length" class="mb-3 rounded-xl border border-[#d0e8da] overflow-hidden">
+                <button @click="showSection.success=!showSection.success"
+                        class="w-full flex items-center justify-between px-4 py-3 bg-[#eef8f2] hover:bg-[#e0f2e8] transition text-left">
+                  <span class="flex items-center gap-2 text-sm font-semibold text-[#4a8c6a]">
+                    ✅ 成功保存
+                    <span class="bg-[#c8e8d4] text-[#3a7458] text-xs px-2 py-0.5 rounded-full">[[ successResults.length ]]</span>
+                  </span>
+                  <svg class="w-4 h-4 text-[#6aaa88] transition-transform duration-200" :class="showSection.success?'rotate-180':''"
+                       xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
+                </button>
+                <div :style="showSection.success ? 'max-height:180px' : 'max-height:0'"
+                     class="overflow-hidden transition-all duration-300 ease-in-out overflow-y-auto no-scrollbar divide-y divide-slate-50/50">
+                  <div v-for="r in successResults" :key="r.key"
+                       class="px-4 py-2.5 flex items-center gap-3 text-xs bg-white hover:bg-slate-50/50 transition">
+                    <code class="font-mono text-slate-500 flex-1 truncate">[[ r.key ]]</code>
+                    <span class="text-slate-400 shrink-0">[[ r.provider||'—' ]]</span>
+                    <span v-if="r.tier" class="text-slate-500 shrink-0">T[[ r.tier ]]</span>
+                    <span v-if="r.models_count" class="text-teal-500 shrink-0">[[ r.models_count ]]模</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 折叠：失败 -->
+              <div v-if="failedResults.length" class="mb-3 rounded-xl border border-[#e8d0d0] overflow-hidden">
+                <button @click="showSection.failed=!showSection.failed"
+                        class="w-full flex items-center justify-between px-4 py-3 bg-[#fdf2f2] hover:bg-[#f8e8e8] transition text-left">
+                  <span class="flex items-center gap-2 text-sm font-semibold text-[#a05050]">
+                    ❌ 校验失败
+                    <span class="bg-[#e8c8c8] text-[#885050] text-xs px-2 py-0.5 rounded-full">[[ failedResults.length ]]</span>
+                  </span>
+                  <svg class="w-4 h-4 text-[#c08080] transition-transform duration-200" :class="showSection.failed?'rotate-180':''"
+                       xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
+                </button>
+                <div :style="showSection.failed ? 'max-height:180px' : 'max-height:0'"
+                     class="overflow-hidden transition-all duration-300 ease-in-out overflow-y-auto no-scrollbar divide-y divide-slate-50/50">
+                  <div v-for="r in failedResults" :key="r.key"
+                       class="px-4 py-2.5 flex items-center gap-3 text-xs bg-white hover:bg-slate-50/30 transition">
+                    <code class="font-mono text-slate-400 flex-1 truncate">[[ r.key ]]</code>
+                    <span class="text-slate-400 shrink-0">[[ r.provider||'未识别' ]]</span>
+                    <span class="text-[#b07070] shrink-0">[[ r.error||'失败' ]]</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 折叠：去重 -->
+              <div v-if="uploadFiltered.length" class="mb-3 rounded-xl border border-[#e8d8b8] overflow-hidden">
+                <button @click="showSection.filtered=!showSection.filtered"
+                        class="w-full flex items-center justify-between px-4 py-3 bg-[#fdf8ee] hover:bg-[#f8f0e0] transition text-left">
+                  <span class="flex items-center gap-2 text-sm font-semibold text-[#9a8030]">
+                    🗂 重复过滤
+                    <span class="bg-[#e0d0a0] text-[#786020] text-xs px-2 py-0.5 rounded-full">[[ uploadFiltered.length ]]</span>
+                  </span>
+                  <svg class="w-4 h-4 text-[#b8a060] transition-transform duration-200" :class="showSection.filtered?'rotate-180':''"
+                       xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
+                </button>
+                <div :style="showSection.filtered ? 'max-height:140px' : 'max-height:0'"
+                     class="overflow-hidden transition-all duration-300 ease-in-out overflow-y-auto no-scrollbar divide-y divide-slate-50/50">
+                  <div v-for="k in uploadFiltered" :key="k"
+                       class="px-4 py-2 text-xs text-slate-400 font-mono bg-white hover:bg-slate-50/20 transition truncate">[[ k ]]</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+            <button @click="resetUpload" class="action-btn px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-xl font-medium">继续上传</button>
+            <button @click="closeUploadModal" class="btn-lift px-5 py-2 text-sm bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-semibold">完成</button>
+          </div>
+        </template>
+
+      </div>
+    </div>
+  </transition>
+
+  <!-- ══ 模型列表 Modal ══════════════════════════════════ -->
+  <transition name="modal">
+    <div v-if="modelsModal.show" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div class="absolute inset-0 bg-slate-900/45 backdrop-blur-md" @click="modelsModal.show=false"></div>
+      <div class="relative bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl w-full max-w-md border border-white/60 flex flex-col max-h-[80vh]">
+        <div class="px-6 py-5 border-b border-slate-100 flex justify-between items-center">
+          <h2 class="font-bold text-slate-800 flex items-center gap-2">
+            <span class="w-6 h-6 rounded-md bg-teal-50 flex items-center justify-center">
+              <i data-lucide="cpu" class="w-3.5 h-3.5 text-teal-600"></i>
+            </span>
+            支持的模型
+            <span class="text-sm font-normal text-slate-400 ml-1">[[ modelsModal.provider ]]</span>
+          </h2>
+          <button @click="modelsModal.show=false" class="action-btn w-7 h-7 flex items-center justify-center text-slate-400 hover:bg-slate-100 rounded-lg">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+        <div class="overflow-y-auto no-scrollbar flex-1">
+          <ul class="divide-y divide-slate-50">
+            <li v-for="m in modelsModal.list" :key="m"
+                class="px-6 py-2.5 text-sm text-slate-600 font-mono hover:bg-slate-50 transition flex items-center gap-2">
+              <span class="w-1 h-1 rounded-full bg-teal-400 shrink-0"></span>
+              [[ m ]]
+            </li>
+          </ul>
+        </div>
+        <div class="px-6 py-3 border-t border-slate-100 bg-slate-50/50 text-xs text-slate-400">
+          共 <span class="font-semibold text-slate-600">[[ modelsModal.list.length ]]</span> 个模型
+        </div>
+      </div>
+    </div>
+  </transition>
+
+  <!-- ══ 校验结果 Modal ═══════════════════════════════════ -->
+  <transition name="modal">
+    <div v-if="verifyResultModal.show" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div class="absolute inset-0 bg-slate-900/45 backdrop-blur-md" @click="verifyResultModal.show=false"></div>
+      <div v-if="verifyResultModal.key" class="relative bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl w-full max-w-sm border border-white/60 flex flex-col">
+
+        <!-- 顶栏 -->
+        <div class="px-6 py-5 border-b border-slate-100 flex justify-between items-center">
+          <h2 class="font-bold text-slate-800 flex items-center gap-2">
+            <span class="w-6 h-6 rounded-md flex items-center justify-center"
+                  :class="verifyResultModal.key.status_code===200 ? 'bg-emerald-50' : verifyResultModal.key.status_code===429 ? 'bg-amber-50' : 'bg-red-50'">
+              <i data-lucide="shield-check" class="w-3.5 h-3.5"
+                 :class="verifyResultModal.key.status_code===200 ? 'text-emerald-600' : verifyResultModal.key.status_code===429 ? 'text-amber-500' : 'text-red-500'"></i>
+            </span>
+            校验结果
+          </h2>
+          <button @click="verifyResultModal.show=false" class="action-btn w-7 h-7 flex items-center justify-center text-slate-400 hover:bg-slate-100 rounded-lg">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+
+        <!-- 内容 -->
+        <div class="px-6 py-5 flex flex-col gap-4">
+
+          <!-- 状态徽章 -->
+          <div class="flex items-center gap-3">
+            <span class="text-3xl leading-none">
+              [[ verifyResultModal.key.status_code===200 ? '✅' : verifyResultModal.key.status_code===429 ? '⚠️' : verifyResultModal.key.status_code===401 ? '❌' : verifyResultModal.key.status_code===403 ? '🚫' : '❓' ]]
+            </span>
+            <div>
+              <div class="font-semibold text-slate-800 text-base">
+                [[ verifyResultModal.key.status_code===200 ? '有效' : verifyResultModal.key.status_code===429 ? '额度不足 / 速率限制' : verifyResultModal.key.status_code===401 ? '未授权 (401)' : verifyResultModal.key.status_code===403 ? '禁止访问 (403)' : `状态码 ${verifyResultModal.key.status_code}` ]]
+              </div>
+              <div class="text-xs text-slate-400 mt-0.5">[[ verifyResultModal.key.provider ]] · ID [[ verifyResultModal.key.id ]]</div>
+            </div>
+          </div>
+
+          <!-- 详情网格 -->
+          <div class="rounded-xl border border-slate-100 overflow-hidden text-sm divide-y divide-slate-50">
+
+            <!-- Key（掩码） -->
+            <div class="flex px-4 py-2.5 gap-3">
+              <span class="text-slate-400 shrink-0 w-14">Key</span>
+              <span class="font-mono text-slate-600 truncate">[[ maskKey(verifyResultModal.key.key) ]]</span>
+            </div>
+
+            <!-- 状态码 -->
+            <div class="flex px-4 py-2.5 gap-3 items-center">
+              <span class="text-slate-400 shrink-0 w-14">状态码</span>
+              <span class="font-mono font-semibold text-slate-800">[[ verifyResultModal.key.status_code ?? '—' ]]</span>
+            </div>
+
+            <!-- Tier（若有） -->
+            <div v-if="verifyResultModal.key.tier" class="flex px-4 py-2.5 gap-3 items-center">
+              <span class="text-slate-400 shrink-0 w-14">等级</span>
+              <span :class="tierBadgeClass(verifyResultModal.key.tier)"
+                    class="px-2 py-0.5 rounded-full text-xs font-bold">
+                [[ formatTier(verifyResultModal.key.tier, verifyResultModal.key.provider) ]]
+              </span>
+            </div>
+
+            <!-- 模型数 -->
+            <div class="flex px-4 py-2.5 gap-3 items-center">
+              <span class="text-slate-400 shrink-0 w-14">模型</span>
+              <span v-if="modelsCount(verifyResultModal.key.models)" class="text-slate-700 font-medium">[[ modelsCount(verifyResultModal.key.models) ]] 个</span>
+              <span v-else class="text-slate-300">—</span>
+            </div>
+
+            <!-- 来源 -->
+            <div v-if="verifyResultModal.key.origin" class="flex px-4 py-2.5 gap-3">
+              <span class="text-slate-400 shrink-0 w-14">来源</span>
+              <span class="text-slate-600 truncate">[[ verifyResultModal.key.origin ]]</span>
+            </div>
+
+          </div>
+
+          <!-- 响应体 -->
+          <div v-if="verifyResultModal.key.verify_body != null">
+            <div class="flex items-center justify-between mb-1.5">
+              <span class="text-xs font-medium text-slate-400 uppercase tracking-wide">响应体</span>
+              <button @click="copyCell(fmtVerifyBody(verifyResultModal.key.verify_body), 'vbody')"
+                      class="action-btn text-xs text-slate-400 hover:text-slate-600 px-2 py-0.5 rounded-lg hover:bg-slate-100 flex items-center gap-1">
+                <i data-lucide="copy" class="w-3 h-3"></i> 复制
+              </button>
+            </div>
+            <pre class="bg-slate-950 text-emerald-300 rounded-xl px-4 py-3 text-xs font-mono overflow-auto max-h-52 whitespace-pre-wrap break-all leading-relaxed">[[ fmtVerifyBody(verifyResultModal.key.verify_body) ]]</pre>
+          </div>
+
+        </div>
+
+        <!-- 底栏 -->
+        <div class="px-6 py-4 border-t border-slate-100 flex justify-end gap-2">
+          <button @click="verifyResultModal.show=false"
+                  class="action-btn px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-xl font-medium">
+            关闭
+          </button>
+          <button v-if="modelsCount(verifyResultModal.key.models)"
+                  @click="openModelsModal(verifyResultModal.key); verifyResultModal.show=false"
+                  class="btn-lift px-4 py-2 text-sm bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-semibold flex items-center gap-1.5">
+            <i data-lucide="cpu" class="w-3.5 h-3.5"></i>
+            查看模型列表
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </transition>
+
+  <!-- Toast -->
+  <transition enter-active-class="transition duration-300 ease-out"
+              enter-from-class="opacity-0 -translate-y-4 scale-95"
+              leave-active-class="transition duration-200 ease-in"
+              leave-to-class="opacity-0 -translate-y-4 scale-95">
+    <div v-if="toastMsg"
+         class="fixed top-5 left-1/2 -translate-x-1/2 pl-4 pr-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-sm font-medium z-[100] border"
+         :class="toastType==='error'
+           ? 'bg-[#8a4a4a] text-white border-[#a86060]'
+           : toastType==='copy'
+             ? 'bg-slate-700 text-white border-slate-600'
+             : 'bg-slate-800 text-white border-slate-700'">
+      <span class="text-base leading-none">
+        [[ toastType==='error' ? '✕' : toastType==='copy' ? '⎘' : '✓' ]]
+      </span>
+      [[ toastMsg ]]
+    </div>
+  </transition>
+
+  <!-- 全局 Tooltip（fixed 定位，不受 overflow:hidden 裁剪）-->
+  <div v-show="tooltip.show"
+       class="g-tooltip"
+       :class="tooltip.show ? '' : 'g-tooltip-hidden'"
+       :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }">
+    [[ tooltip.text ]]
+  </div>
+
+</div><!-- #app -->
+
+<script>
+const { createApp, ref, computed, reactive, onMounted, watch, nextTick } = Vue;
+
+// ── Tier 徽章（灰银系，由浅到深）──────────────────────
+const TIER_BADGE = {
+  '1': 'bg-slate-50  text-slate-500 border-slate-200',
+  '2': 'bg-slate-100 text-slate-600 border-slate-300',
+  '3': 'bg-slate-200 text-slate-700 border-slate-400',
+  '4': 'bg-slate-700 text-slate-100 border-slate-600',
+  '5': 'bg-slate-900 text-white     border-slate-800',
+};
+
+createApp({
+  delimiters: ['[[', ']]'],
+  setup() {
+    // ── 基础状态 ────────────────────────────────────────────
+    const keys           = ref([]);
+    const loading        = ref(false);
+    const searchQuery    = ref('');
+    // 默认展示 Google (Gemini) 分组
+    const providerFilter = ref('Google');
+    const statusFilter   = ref('all');
+    const sortBy         = ref('id');
+    const sortDesc       = ref(true);
+    const currentPage    = ref(1);
+    const pageSize       = ref(20);
+
+    const copiedKey    = ref(null);
+    const refreshCount = ref(0);    // 每次刷新自增，触发行重新动画
+    const refreshDone  = ref(false); // 刷新完成闪光状态
+
+    // Modal：新增/编辑
+    const showModal = ref(false);
+    const isEditing = ref(false);
+    const form      = reactive({ id: null, provider: '', key: '', origin: '', tier: '', notes: '' });
+
+    // Modal：批量上传
+    const showUploadModal = ref(false);
+    const uploadForm      = reactive({ keys: '', origin: '' });
+    const uploading       = ref(false);
+    const uploadPhase     = ref('input');
+    const uploadProgress  = ref(0);
+    const uploadResults   = ref(null);
+    const uploadFiltered  = ref([]);
+    const uploadingTotal  = ref(0);
+    const showSection     = reactive({ success: true, failed: true, filtered: false });
+
+    // Modal：模型列表
+    const modelsModal = reactive({ show: false, list: [], provider: '' });
+
+    // Modal：校验结果
+    const verifyResultModal = reactive({ show: false, key: null });
+
+    // ── 并发校验状态（用 reactive 对象替代单个 ref，支持多条同时校验）──
+    const verifyingMap = reactive({});
+
+    // ── 校验展示覆盖层 ──────────────────────────────────────
+    // 校验后立即更新该行显示，但不触发重新过滤（行保持在当前 statusFilter 组）
+    // 点击刷新后清空，keys.value 重载后才真正重分组
+    const verifyCache = reactive({});
+
+    const toastMsg  = ref('');
+    const toastType = ref('success');
+
+    // ── 全局 Tooltip 状态 ─────────────────────────────────
+    const tooltip = reactive({ show: false, text: '', x: 0, y: 0 });
+
+    const showTooltipAt = (e, text) => {
+      if (!text) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      tooltip.x    = rect.left + rect.width / 2;
+      tooltip.y    = rect.top;
+      tooltip.text = text;
+      tooltip.show = true;
+    };
+    const hideTooltip = () => { tooltip.show = false; };
+
+    // ── Computed ─────────────────────────────────────────
+    const validCount   = computed(() => keys.value.filter(k => k.status_code === 200).length);
+    const invalidCount = computed(() =>
+      keys.value.filter(k => k.status_code === 401 || k.status_code === 403).length
+    );
+
+    const providerOptions = computed(() => {
+      const s = new Set(keys.value.map(k => k.provider).filter(Boolean));
+      // 确保常用供应商始终可选
+      ['OpenAI', 'Anthropic', 'Google', 'OpenRouter'].forEach(p => s.add(p));
+      return [...s].sort((a, b) => {
+        const order = { Google: 0, OpenAI: 1, Anthropic: 2, OpenRouter: 3 };
+        return (order[a] ?? 99) - (order[b] ?? 99) || a.localeCompare(b);
+      });
+    });
+
+    const uploadLineCount = computed(() =>
+      uploadForm.keys.split('\n').filter(l => l.trim()).length
+    );
+
+    const uploadDupCount = computed(() => {
+      const lines = uploadForm.keys.split('\n').map(l => l.trim()).filter(Boolean);
+      const seen = new Set(); let dupes = 0;
+      for (const l of lines) { if (seen.has(l)) dupes++; else seen.add(l); }
+      return dupes;
+    });
+
+    const successResults = computed(() => (uploadResults.value?.results || []).filter(r => r.saved));
+    const failedResults  = computed(() => (uploadResults.value?.results || []).filter(r => !r.saved));
+
+    const processedKeys = computed(() => {
+      let result = keys.value;
+      if (providerFilter.value !== 'all')
+        result = result.filter(k => k.provider === providerFilter.value);
+      if (statusFilter.value !== 'all') {
+        // 已校验但尚未刷新的行（verifyCache 里的）固定留在当前视图，不因状态变化而消失
+        const pinnedIds = new Set(Object.keys(verifyCache).map(Number));
+        if (statusFilter.value === 'other')
+          result = result.filter(k => pinnedIds.has(k.id) || (k.status_code != null && ![200,401,403,429].includes(k.status_code)));
+        else
+          result = result.filter(k => pinnedIds.has(k.id) || k.status_code === parseInt(statusFilter.value));
+      }
+      const q = searchQuery.value.trim().toLowerCase();
+      if (q)
+        result = result.filter(k =>
+          String(k.id).includes(q) ||
+          (k.key    || '').toLowerCase().includes(q) ||
+          (k.origin || '').toLowerCase().includes(q) ||
+          (k.notes  || '').toLowerCase().includes(q)
+        );
+      return [...result].sort((a, b) => {
+        let av, bv, cmp;
+        switch (sortBy.value) {
+          case 'provider':
+            cmp = (a.provider||'').localeCompare(b.provider||'');
+            return sortDesc.value ? -cmp : cmp;
+          case 'key':
+            cmp = (a.key||'').localeCompare(b.key||'');
+            return sortDesc.value ? -cmp : cmp;
+          case 'origin':
+            cmp = (a.origin||'').localeCompare(b.origin||'');
+            return sortDesc.value ? -cmp : cmp;
+          case 'tier':
+            av = parseFloat(a.tier) || 9999;
+            bv = parseFloat(b.tier) || 9999;
+            break;
+          case 'status_code':
+            av = a.status_code ?? -1;
+            bv = b.status_code ?? -1;
+            break;
+          case 'models':
+            av = modelsCount(a.models);
+            bv = modelsCount(b.models);
+            break;
+          case 'create_time':
+            av = a.create_time ? new Date(a.create_time).getTime() : 0;
+            bv = b.create_time ? new Date(b.create_time).getTime() : 0;
+            break;
+          default:
+            av = a.id || 0; bv = b.id || 0;
+        }
+        return sortDesc.value ? bv - av : av - bv;
+      });
+    });
+
+    const totalPages    = computed(() => Math.max(1, Math.ceil(processedKeys.value.length / pageSize.value)));
+    const paginatedKeys = computed(() =>
+      processedKeys.value.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value)
+    );
+    // 展示层：把 verifyCache 的最新数据覆盖到对应行，其余行保持原样
+    // 过滤/排序/分页逻辑仍基于 paginatedKeys（不变），仅渲染时使用合并后的数据
+    const paginatedDisplayRows = computed(() =>
+      paginatedKeys.value.map(k => verifyCache[k.id] != null ? { ...k, ...verifyCache[k.id] } : k)
+    );
+    const displayPages  = computed(() => {
+      const t = totalPages.value, c = currentPage.value;
+      if (t <= 7) return Array.from({ length: t }, (_, i) => i + 1);
+      if (c <= 4)     return [1,2,3,4,5,'…',t];
+      if (c >= t - 3) return [1,'…',t-4,t-3,t-2,t-1,t];
+      return [1,'…',c-1,c,c+1,'…',t];
+    });
+
+    watch(totalPages, v => { if (currentPage.value > v) currentPage.value = v; });
+    watch([searchQuery, providerFilter, statusFilter, pageSize], () => { currentPage.value = 1; });
+
+    // ── Helpers ──────────────────────────────────────────
+    const maskKey = k => {
+      if (!k) return '—';
+      if (k.length <= 14) return k;
+      return k.slice(0, 6) + '••••••' + k.slice(-6);
+    };
+
+    const isUrl       = s => s && /^https?:\/\//.test(s);
+    const truncateUrl = url => {
+      try { const u = new URL(url); return u.host + (u.pathname !== '/' ? u.pathname : ''); }
+      catch { return url.length > 28 ? url.slice(0,28)+'…' : url; }
+    };
+    // OpenRouter 的 tier 存的是余额，直接显示；其他供应商才加 T 前缀
+    const formatTier = (t, provider) => {
+      if (!t) return '';
+      if (provider === 'OpenRouter') return t;
+      return /^\d+(\.\d+)?$/.test(String(t)) ? `T${t}` : t;
+    };
+    const tierBadgeClass = t => TIER_BADGE[String(t)] ?? 'bg-slate-50 text-slate-500 border-slate-200';
+
+    // 鲜亮供应商圆点
+    const providerDot = p => ({
+      'OpenAI':     'bg-emerald-500',
+      'Anthropic':  'bg-orange-500',
+      'Google':     'bg-blue-500',
+      'OpenRouter': 'bg-slate-500',
+      'xAI':        'bg-slate-500',
+    })[p] ?? 'bg-gray-400';
+
+    // 鲜亮状态码徽章
+    const statusCodeClass = code => {
+      if (code === 200) return 'bg-emerald-50 text-emerald-700 border-emerald-300 status-valid';
+      if (code === 401) return 'bg-red-50 text-red-600 border-red-300 status-invalid';
+      if (code === 403) return 'bg-orange-50 text-orange-700 border-orange-300 status-forbid';
+      if (code === 429) return 'bg-amber-50 text-amber-700 border-amber-300 status-quota';
+      if (code != null) return 'bg-slate-50 text-slate-500 border-slate-300';
+      return 'bg-slate-50 text-slate-400 border-slate-200';
+    };
+
+    const modelsCount = str => {
+      if (!str) return 0;
+      try { return JSON.parse(str).length; } catch { return 0; }
+    };
+
+    // ── 排序图标（用 v-html 简化模板）──────────────────
+    const sortSvg = col => {
+      const active = `stroke="currentColor" class="w-3 h-3" style="color:#6b7280"`;
+      const idle   = `stroke="currentColor" class="w-3 h-3" style="color:#d1d5db"`;
+      if (sortBy.value === col && sortDesc.value)
+        return `<svg viewBox="0 0 10 10" fill="none" ${active} stroke-width="2.2" stroke-linecap="round"><path d="M2 3.5 5 7 8 3.5"/></svg>`;
+      if (sortBy.value === col)
+        return `<svg viewBox="0 0 10 10" fill="none" ${active} stroke-width="2.2" stroke-linecap="round"><path d="M2 6.5 5 3 8 6.5"/></svg>`;
+      return `<svg viewBox="0 0 10 10" fill="none" ${idle} stroke-width="1.8" stroke-linecap="round"><path d="M2 3.5 5 2 8 3.5"/><path d="M2 6.5 5 8 8 6.5"/></svg>`;
+    };
+
+    const showToast = (msg, type = 'success', duration = 2600) => {
+      toastMsg.value = msg; toastType.value = type;
+      setTimeout(() => { toastMsg.value = ''; }, duration);
+    };
+
+    const copyCell = async (text, id) => {
+      if (!text || text === '—') return;
+      try {
+        await navigator.clipboard.writeText(text);
+        copiedKey.value = id;
+        showToast('已复制', 'copy', 1500);
+        setTimeout(() => { copiedKey.value = null; }, 1200);
+      } catch { showToast('复制失败，请手动复制', 'error'); }
+    };
+
+    const openModelsModal = item => {
+      try { modelsModal.list = JSON.parse(item.models || '[]'); } catch { modelsModal.list = []; }
+      modelsModal.provider = item.provider;
+      modelsModal.show = true;
+      nextTick(() => lucide.createIcons());
+    };
+
+    const toggleSort = col => {
+      if (sortBy.value === col) sortDesc.value = !sortDesc.value;
+      else { sortBy.value = col; sortDesc.value = true; }
+    };
+
+    const fmtVerifyBody = body => {
+      if (body == null) return '';
+      if (typeof body === 'string') return body;
+      try { return JSON.stringify(body, null, 2); } catch { return String(body); }
+    };
+
+    const formatTime = s => {
+      if (!s) return '—';
+      try {
+        const d = new Date(s);
+        const pad = n => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      } catch { return s.slice(0, 16); }
+    };
+
+    // ── 全局 Fetch 包装器 ───────────────────────────────
+    const apiFetch = async (url, options = {}) => {
+      try {
+        const res = await fetch(url, { credentials: 'same-origin', ...options });
+        const err = !res.ok ? await res.json().catch(() => ({})) : {};
+        if (res.status === 401 && err.detail === '未登录') {
+          window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname + window.location.search);
+          return null;
+        }
+        if (!res.ok) { showToast(err.detail || `请求失败 (${res.status})`, 'error'); return null; }
+        return res;
+      } catch { showToast('网络错误，请检查连接', 'error'); return null; }
+    };
+
+    const doLogout = async () => {
+      try { await fetch('/logout', { method: 'POST', credentials: 'same-origin' }); } catch {}
+      window.location.href = '/login';
+    };
+
+    // ── API ──────────────────────────────────────────────
+    const fetchKeyRow = async id => {
+      const res = await apiFetch(`/api/keys/${id}`);
+      return res ? await res.json() : null;
+    };
+
+    // 局部刷新单行（校验完成后同步到所有分组）
+    const updateRow = async id => {
+      const row = await fetchKeyRow(id);
+      if (!row) return;
+      const idx = keys.value.findIndex(k => k.id === id);
+      if (idx !== -1) keys.value[idx] = row;  // Vue 响应式会同步更新所有分组视图
+      else keys.value.unshift(row);
+    };
+
+    const fetchKeys = async () => {
+      loading.value = true;
+      try {
+        const res = await apiFetch('/api/keys');
+        if (res) {
+          keys.value = await res.json();
+          // 清空展示覆盖层：数据已重载，行按真实 status_code 重新分组
+          Object.keys(verifyCache).forEach(k => delete verifyCache[k]);
+          refreshCount.value++;   // 行 key 变化 → 全部触发级联入场动画
+        }
+      } finally { loading.value = false; }
+    };
+
+    // 刷新按钮专用：完成后触发绿色闪光
+    const doRefresh = async () => {
+      refreshDone.value = false;
+      await fetchKeys();
+      refreshDone.value = true;
+      setTimeout(() => { refreshDone.value = false; }, 1800);
+    };
+
+    const openModal = (editMode, item = null) => {
+      isEditing.value = editMode;
+      Object.assign(form, editMode && item
+        ? { id: item.id, provider: item.provider||'', key: item.key||'',
+            origin: item.origin||'', tier: item.tier||'', notes: item.notes||'' }
+        : { id: null, provider: '', key: '', origin: '', tier: '', notes: '' }
+      );
+      showModal.value = true;
+      nextTick(() => lucide.createIcons());
+    };
+
+    const saveKey = async () => {
+      if (!form.key?.trim()) { showToast('密钥不能为空', 'error'); return; }
+      const H = { 'Content-Type': 'application/json' };
+      if (isEditing.value) {
+        const res = await apiFetch(`/api/keys/${form.id}`, {
+          method: 'PATCH', headers: H,
+          body: JSON.stringify({
+            provider: form.provider?.trim()||null, key: form.key.trim(),
+            origin: form.origin?.trim()||null, tier: form.tier||null, notes: form.notes?.trim()||null,
+          }),
+        });
+        if (res) {
+          const updated = await res.json();
+          const idx = keys.value.findIndex(k => k.id === form.id);
+          if (idx !== -1) keys.value[idx] = updated;
+          showModal.value = false;
+          showToast('修改已保存');
+        }
+      } else {
+        const res = await apiFetch('/api/keys', {
+          method: 'POST', headers: H,
+          body: JSON.stringify({ key: form.key.trim(), origin: form.origin?.trim()||null, notes: form.notes?.trim()||null }),
+        });
+        if (res) {
+          const data = await res.json();
+          showModal.value = false;
+          showToast('凭证已录入，校验完成');
+          if (data.id) await updateRow(data.id);
+        }
+      }
+    };
+
+    const deleteKey = async id => {
+      if (!confirm('确认删除此凭证？')) return;
+      const res = await apiFetch(`/api/keys/${id}`, { method: 'DELETE' });
+      if (res) { keys.value = keys.value.filter(k => k.id !== id); showToast('已删除'); }
+    };
+
+    // ── 并发校验（支持同时校验多个密钥）────────────────
+    const verifyKey = async item => {
+      if (verifyingMap[item.id]) return;   // 防重入
+      verifyingMap[item.id] = true;
+      try {
+        const res = await apiFetch(`/api/keys/${item.id}/verify`, { method: 'POST' });
+        if (!res) return;
+        // 接口直接返回完整 Key 对象（已持久化），无需再发 GET，彻底消除竞争
+        const updatedKey = await res.json();
+        // 写入展示覆盖层：该行立即显示新数据，但 keys.value 不变（保持当前 statusFilter 分组）
+        // 点击刷新后 keys.value 重载，verifyCache 清空，行才真正重新分组
+        verifyCache[item.id] = updatedKey;
+
+        // 展示校验结果弹窗
+        verifyResultModal.key  = updatedKey;
+        verifyResultModal.show = true;
+        nextTick(() => lucide.createIcons());
+      } finally {
+        delete verifyingMap[item.id];
+      }
+    };
+
+    // ── 批量上传 ─────────────────────────────────────────
+    const openUploadModal = () => {
+      uploadPhase.value = 'input'; uploadResults.value = null; uploadFiltered.value = [];
+      showUploadModal.value = true;
+      nextTick(() => lucide.createIcons());
+    };
+
+    const closeUploadModal = () => {
+      if (uploading.value) return;
+      showUploadModal.value = false;
+      uploadForm.keys = ''; uploadForm.origin = '';
+      uploadPhase.value = 'input'; uploadResults.value = null; uploadFiltered.value = [];
+    };
+
+    const resetUpload = () => {
+      uploadForm.keys = ''; uploadForm.origin = '';
+      uploadPhase.value = 'input'; uploadResults.value = null; uploadFiltered.value = [];
+    };
+
+    const doUpload = async () => {
+      if (uploading.value) return;
+      const rawLines = uploadForm.keys.split('\n').map(l => l.trim()).filter(Boolean);
+      const seen = new Set(), deduped = [], dupes = [];
+      for (const line of rawLines) {
+        if (seen.has(line)) dupes.push(line);
+        else { seen.add(line); deduped.push(line); }
+      }
+      uploadFiltered.value = dupes;
+      if (!deduped.length) { showToast('没有有效的密钥', 'error'); return; }
+
+      uploading.value    = true;
+      uploadingTotal.value = deduped.length;
+      uploadProgress.value = 0;
+      uploadPhase.value  = 'uploading';
+
+      const estimated = deduped.length * 1800;
+      const startTime = Date.now();
+      const timer = setInterval(() => {
+        uploadProgress.value = Math.min(92, ((Date.now() - startTime) / estimated) * 100);
+      }, 120);
+
+      try {
+        const res = await apiFetch('/api/keys/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keys: deduped.join('\n'), origin: uploadForm.origin?.trim()||null, concurrent: 10 }),
+        });
+        clearInterval(timer);
+        uploadProgress.value = 100;
+        await new Promise(r => setTimeout(r, 400));
+        if (res) {
+          uploadResults.value = await res.json();
+          uploadPhase.value   = 'done';
+          showSection.success = true; showSection.failed = true; showSection.filtered = false;
+          await fetchKeys();
+        } else {
+          uploadPhase.value = 'input';
+        }
+      } catch {
+        clearInterval(timer);
+        uploadPhase.value = 'input';
+      } finally {
+        uploading.value = false;
+      }
+    };
+
+    onMounted(() => { fetchKeys(); lucide.createIcons(); });
+
+    return {
+      keys, loading, searchQuery, providerFilter, statusFilter, sortBy, sortDesc, currentPage, pageSize,
+      processedKeys, totalPages, paginatedKeys, paginatedDisplayRows, displayPages, providerOptions,
+      validCount, invalidCount,
+      showModal, isEditing, form,
+      showUploadModal, uploadForm, uploading, uploadPhase, uploadProgress,
+      uploadResults, uploadFiltered, uploadingTotal, uploadLineCount, uploadDupCount,
+      successResults, failedResults, showSection,
+      modelsModal, verifyResultModal, copiedKey, verifyingMap, toastMsg, toastType,
+      refreshCount, refreshDone,
+      tooltip, showTooltipAt, hideTooltip,
+      maskKey, isUrl, truncateUrl, formatTier, tierBadgeClass,
+      statusCodeClass, providerDot, modelsCount, copyCell, openModelsModal,
+      toggleSort, sortSvg, formatTime, fmtVerifyBody,
+      fetchKeys, doRefresh, fetchKeyRow, updateRow, openModal, saveKey, deleteKey, verifyKey, doLogout,
+      openUploadModal, closeUploadModal, resetUpload, doUpload,
+      Math,
+    };
+  },
+}).mount('#app');
+</script>
+</body>
+</html>

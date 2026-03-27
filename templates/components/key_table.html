@@ -1,0 +1,46 @@
+<table class="w-full text-sm text-left text-gray-700">
+  <thead class="bg-gray-100 text-gray-500 uppercase text-xs">
+    <tr>
+      <th class="px-3 py-3">ID</th>
+      <th class="px-3 py-3">Provider</th>
+      <th class="px-3 py-3">Key</th>
+      <th class="px-3 py-3">Origin</th>
+      <th class="px-3 py-3">Tier</th>
+      <th class="px-3 py-3">Models</th>
+      <th class="px-3 py-3">Created</th>
+      <th class="px-3 py-3">Notes</th>
+      <th class="px-3 py-3"></th>
+    </tr>
+  </thead>
+  <tbody class="divide-y divide-gray-100">
+    {% for k in keys %}
+    <tr class="hover:bg-gray-50">
+      <td class="px-3 py-2 text-gray-400">{{ k.id }}</td>
+      <td class="px-3 py-2 font-medium text-indigo-600">{{ k.provider }}</td>
+      <td class="px-3 py-2 font-mono text-xs text-gray-500 max-w-xs truncate" title="{{ k.key }}">{{ k.key[:24] }}…</td>
+      <td class="px-3 py-2">{{ k.origin or "—" }}</td>
+      <td class="px-3 py-2">
+        {% if k.tier %}
+        <span class="px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 text-xs">{{ k.tier }}</span>
+        {% else %}—{% endif %}
+      </td>
+      <td class="px-3 py-2 text-gray-500 text-xs">{{ k.models or "—" }}</td>
+      <td class="px-3 py-2 text-gray-400 text-xs whitespace-nowrap">{{ k.create_time.strftime("%Y-%m-%d") }}</td>
+      <td class="px-3 py-2 text-gray-500 text-xs max-w-xs truncate">{{ k.notes or "—" }}</td>
+      <td class="px-3 py-2">
+        <button
+          hx-delete="/keys/{{ k.id }}"
+          hx-target="#key-table"
+          hx-confirm="确定删除这条 Key？"
+          class="text-red-400 hover:text-red-600 text-xs">
+          删除
+        </button>
+      </td>
+    </tr>
+    {% else %}
+    <tr>
+      <td colspan="9" class="px-3 py-8 text-center text-gray-400">暂无数据</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
