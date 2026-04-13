@@ -21,14 +21,12 @@ from app.http_client import close_http_client
 from app.services import key_service
 from app.services.fofa_service import fofa_search
 from app.services.scanner_service import scan_urls
-from app.utils.concurrency import gather_limited
-
 
 def _build_query(provider: str) -> str:
     date = (datetime.now() - timedelta(days=random.randint(1, 365))).strftime("%Y-%m-%d")
     queries = {
         "OpenAI":    f'(body="sk-proj-" || body="sk-ant-api") && after="{date}"',
-        "Google":    f'body="AIzaSy" && after="{date}"',
+        "Google":    f'(body="AIzaSy" || body="gemini" && body="key") && after="{date}"',
     }
     q = queries[provider]
     logger.info(f"FOFA 查询[{provider}]: {q}")
@@ -56,7 +54,7 @@ def _write_backup(keys: list[dict]) -> Path | None:
 
 
 async def main():
-    fofa_size = 1000
+    fofa_size = 10000
     scan_concurrent = 40
     verify_concurrent = 40
 

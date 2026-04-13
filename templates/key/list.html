@@ -364,7 +364,7 @@
         </tbody>
 
         <!-- ── 数据行（刷新时保持可见，遮罩叠在上方）── -->
-        <transition-group v-else-if="paginatedDisplayRows.length > 0" name="row" tag="tbody">
+        <tbody is="vue:TransitionGroup" v-else-if="paginatedDisplayRows.length > 0" name="row" tag="tbody">
           <tr v-for="(item, index) in paginatedDisplayRows"
               :key="`r${refreshCount}_${item.id}`"
               :style="{ '--row-i': index }"
@@ -481,7 +481,7 @@
               </div>
             </td>
           </tr>
-        </transition-group>
+        </tbody>
       </table>
     </div>
 
@@ -948,9 +948,8 @@ createApp({
     const keys           = ref([]);
     const loading        = ref(false);
     const searchQuery    = ref('');
-    // 默认展示 Google (Gemini) 分组
-    const providerFilter = ref('Google');
-    const statusFilter   = ref('all');
+    const providerFilter = ref('all');
+    const statusFilter   = ref('200');
     const sortBy         = ref('id');
     const sortDesc       = ref(true);
     const currentPage    = ref(1);
@@ -1418,7 +1417,6 @@ createApp({
       toggleSort, sortSvg, formatTime, fmtVerifyBody,
       fetchKeys, doRefresh, fetchKeyRow, updateRow, openModal, saveKey, deleteKey, verifyKey, doLogout,
       openUploadModal, closeUploadModal, resetUpload, doUpload,
-      Math,
     };
   },
 }).mount('#app');
