@@ -35,10 +35,20 @@
       0%,100% { box-shadow: 0 0 0 0 rgba(217,119,6,.42); }
       50%      { box-shadow: 0 0 0 4px rgba(217,119,6,0); }
     }
+    @keyframes breathe-violet {
+      0%,100% { box-shadow: 0 0 0 0 rgba(139,92,246,.42); }
+      50%      { box-shadow: 0 0 0 4px rgba(139,92,246,0); }
+    }
+    @keyframes breathe-rose {
+      0%,100% { box-shadow: 0 0 0 0 rgba(244,63,94,.38); }
+      50%      { box-shadow: 0 0 0 4px rgba(244,63,94,0); }
+    }
     .status-valid   { animation: breathe-green  2.6s ease-in-out infinite; }
     .status-invalid { animation: breathe-red    2.3s ease-in-out infinite; }
     .status-quota   { animation: breathe-amber  2.3s ease-in-out infinite; }
     .status-forbid  { animation: breathe-orange 2.6s ease-in-out infinite; }
+    .status-unavail { animation: breathe-violet 2.5s ease-in-out infinite; }
+    .status-badreq  { animation: breathe-rose   2.4s ease-in-out infinite; }
 
     /* ── 刷新旋转 ────────────────────────────────── */
     @keyframes spin-ease { to { transform: rotate(360deg); } }
@@ -246,9 +256,11 @@
               class="px-3 py-2.5 rounded-xl text-sm bg-white/72 backdrop-blur-sm shadow-sm ring-1 ring-black/5 focus:ring-2 focus:ring-slate-400 outline-none cursor-pointer hover:bg-white">
         <option value="all">全部状态</option>
         <option value="200">200 · 有效</option>
+        <option value="400">400 · 错误请求</option>
         <option value="401">401 · 未授权</option>
         <option value="403">403 · 禁止</option>
         <option value="429">429 · 限额</option>
+        <option value="503">503 · 服务不可用</option>
         <option value="other">其他</option>
       </select>
       <!-- 刷新（带文字 + 颜色状态 + 完成闪光）-->
@@ -279,6 +291,11 @@
               :disabled="loading || paginatedDisplayRows.length===0 || batchRunning"
               class="toolbar-btn btn-lift flex-1 md:flex-none bg-white/72 backdrop-blur-sm ring-1 ring-black/5 hover:bg-white hover:ring-slate-300 text-slate-600 hover:text-slate-900 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-sm text-sm font-medium">
         <i data-lucide="check-circle" class="w-4 h-4"></i> 批量校验本页
+      </button>
+      <button @click="copyCurrentPageKeys"
+              :disabled="loading || paginatedDisplayRows.length===0"
+              class="toolbar-btn btn-lift flex-1 md:flex-none bg-white/72 backdrop-blur-sm ring-1 ring-black/5 hover:bg-white hover:ring-slate-300 text-slate-600 hover:text-slate-900 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-sm text-sm font-medium">
+        <i data-lucide="copy" class="w-4 h-4"></i> 一键复制本页
       </button>
       <button @click="openModal(false)"
               class="btn-lift flex-1 md:flex-none bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-md shadow-slate-700/25 text-sm font-medium">
@@ -807,9 +824,9 @@
         <div class="px-6 py-5 border-b border-slate-100 flex justify-between items-center">
           <h2 class="font-bold text-slate-800 flex items-center gap-2">
             <span class="w-6 h-6 rounded-md flex items-center justify-center"
-                  :class="verifyResultModal.key.status_code===200 ? 'bg-emerald-50' : verifyResultModal.key.status_code===429 ? 'bg-amber-50' : 'bg-red-50'">
+                  :class="verifyResultModal.key.status_code===200 ? 'bg-emerald-50' : verifyResultModal.key.status_code===429 ? 'bg-amber-50' : verifyResultModal.key.status_code===503 ? 'bg-violet-50' : verifyResultModal.key.status_code===400 ? 'bg-rose-50' : 'bg-red-50'">
               <i data-lucide="shield-check" class="w-3.5 h-3.5"
-                 :class="verifyResultModal.key.status_code===200 ? 'text-emerald-600' : verifyResultModal.key.status_code===429 ? 'text-amber-500' : 'text-red-500'"></i>
+                 :class="verifyResultModal.key.status_code===200 ? 'text-emerald-600' : verifyResultModal.key.status_code===429 ? 'text-amber-500' : verifyResultModal.key.status_code===503 ? 'text-violet-600' : verifyResultModal.key.status_code===400 ? 'text-rose-600' : 'text-red-500'"></i>
             </span>
             校验结果
           </h2>
@@ -824,11 +841,11 @@
           <!-- 状态徽章 -->
           <div class="flex items-center gap-3">
             <span class="text-3xl leading-none">
-              [[ verifyResultModal.key.status_code===200 ? '✅' : verifyResultModal.key.status_code===429 ? '⚠️' : verifyResultModal.key.status_code===401 ? '❌' : verifyResultModal.key.status_code===403 ? '🚫' : '❓' ]]
+              [[ verifyResultModal.key.status_code===200 ? '✅' : verifyResultModal.key.status_code===429 ? '⚠️' : verifyResultModal.key.status_code===503 ? '🛠' : verifyResultModal.key.status_code===400 ? '📛' : verifyResultModal.key.status_code===401 ? '❌' : verifyResultModal.key.status_code===403 ? '🚫' : '❓' ]]
             </span>
             <div>
               <div class="font-semibold text-slate-800 text-base">
-                [[ verifyResultModal.key.status_code===200 ? '有效' : verifyResultModal.key.status_code===429 ? '额度不足 / 速率限制' : verifyResultModal.key.status_code===401 ? '未授权 (401)' : verifyResultModal.key.status_code===403 ? '禁止访问 (403)' : `状态码 ${verifyResultModal.key.status_code}` ]]
+                [[ verifyResultModal.key.status_code===200 ? '有效' : verifyResultModal.key.status_code===429 ? '额度不足 / 速率限制' : verifyResultModal.key.status_code===503 ? '服务不可用 (503)' : verifyResultModal.key.status_code===400 ? '错误请求 (400)' : verifyResultModal.key.status_code===401 ? '未授权 (401)' : verifyResultModal.key.status_code===403 ? '禁止访问 (403)' : `状态码 ${verifyResultModal.key.status_code}` ]]
               </div>
               <div class="text-xs text-slate-400 mt-0.5">[[ verifyResultModal.key.provider ]] · ID [[ verifyResultModal.key.id ]]</div>
             </div>
@@ -1048,7 +1065,7 @@ createApp({
         // 已校验但尚未刷新的行（verifyCache 里的）固定留在当前视图，不因状态变化而消失
         const pinnedIds = new Set(Object.keys(verifyCache).map(Number));
         if (statusFilter.value === 'other')
-          result = result.filter(k => pinnedIds.has(k.id) || (k.status_code != null && ![200,401,403,429].includes(k.status_code)));
+          result = result.filter(k => pinnedIds.has(k.id) || (k.status_code != null && ![200,400,401,403,429,503].includes(k.status_code)));
         else
           result = result.filter(k => pinnedIds.has(k.id) || k.status_code === parseInt(statusFilter.value));
       }
@@ -1163,6 +1180,8 @@ createApp({
       if (code === 401) return 'bg-red-50 text-red-600 border-red-300 status-invalid';
       if (code === 403) return 'bg-orange-50 text-orange-700 border-orange-300 status-forbid';
       if (code === 429) return 'bg-amber-50 text-amber-700 border-amber-300 status-quota';
+      if (code === 400) return 'bg-rose-50 text-rose-700 border-rose-300 status-badreq';
+      if (code === 503) return 'bg-violet-50 text-violet-700 border-violet-300 status-unavail';
       if (code != null) return 'bg-slate-50 text-slate-500 border-slate-300';
       return 'bg-slate-50 text-slate-400 border-slate-200';
     };
@@ -1196,6 +1215,26 @@ createApp({
         showToast('已复制', 'copy', 1500);
         setTimeout(() => { copiedKey.value = null; }, 1200);
       } catch { showToast('复制失败，请手动复制', 'error'); }
+    };
+
+    /** 一键复制当前页表格中的全部 key，换行分隔（一行一条） */
+    const copyCurrentPageKeys = async () => {
+      const rows = paginatedDisplayRows.value;
+      if (!rows || rows.length === 0) {
+        showToast('当前页没有记录', 'error');
+        return;
+      }
+      const lines = rows.map(k => k && k.key).filter(Boolean);
+      if (!lines.length) {
+        showToast('没有可复制的内容', 'error');
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(lines.join('\n'));
+        showToast(`已复制 ${lines.length} 条（一行一条）`, 'success', 2200);
+      } catch {
+        showToast('复制失败', 'error');
+      }
     };
 
     const openModelsModal = item => {
@@ -1435,6 +1474,7 @@ createApp({
       toggleSort, sortSvg, formatTime, fmtVerifyBody,
       fetchKeys, doRefresh, fetchKeyRow, updateRow, openModal, saveKey, deleteKey, verifyKey, doLogout,
       openUploadModal, closeUploadModal, resetUpload, doUpload, batchRunning, batchVerifyCurrentPage,
+      copyCurrentPageKeys,
     };
   },
 }).mount('#app');
