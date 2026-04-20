@@ -275,6 +275,11 @@
               class="toolbar-btn btn-lift flex-1 md:flex-none bg-white/72 backdrop-blur-sm ring-1 ring-black/5 hover:bg-white hover:ring-slate-300 text-slate-600 hover:text-slate-900 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-sm text-sm font-medium">
         <i data-lucide="upload-cloud" class="w-4 h-4"></i> 批量上传
       </button>
+      <button @click="batchVerifyCurrentPage"
+              :disabled="loading || paginatedDisplayRows.length===0 || batchRunning"
+              class="toolbar-btn btn-lift flex-1 md:flex-none bg-white/72 backdrop-blur-sm ring-1 ring-black/5 hover:bg-white hover:ring-slate-300 text-slate-600 hover:text-slate-900 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-sm text-sm font-medium">
+        <i data-lucide="check-circle" class="w-4 h-4"></i> 批量校验本页
+      </button>
       <button @click="openModal(false)"
               class="btn-lift flex-1 md:flex-none bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-md shadow-slate-700/25 text-sm font-medium">
         <i data-lucide="plus" class="w-4 h-4"></i> 新增密钥
@@ -1099,6 +1104,19 @@ createApp({
     const paginatedDisplayRows = computed(() =>
       paginatedKeys.value.map(k => verifyCache[k.id] != null ? { ...k, ...verifyCache[k.id] } : k)
     );
+    const batchRunning = ref(false);
+    const batchVerifyCurrentPage = async () => {
+      if (batchRunning.value) return;
+      if (paginatedDisplayRows.value.length === 0) return;
+      batchRunning.value = true;
+      try {
+        const items = paginatedDisplayRows.value.filter(item => item && item.id != null && !verifyingMap[item.id]);
+        if (items.length === 0) return;
+        await Promise.allSettled(items.map(item => verifyKey(item)));
+      } finally {
+        batchRunning.value = false;
+      }
+    };
     const displayPages  = computed(() => {
       const t = totalPages.value, c = currentPage.value;
       if (t <= 7) return Array.from({ length: t }, (_, i) => i + 1);
@@ -1416,7 +1434,7 @@ createApp({
       statusCodeClass, providerDot, modelsCount, copyCell, openModelsModal,
       toggleSort, sortSvg, formatTime, fmtVerifyBody,
       fetchKeys, doRefresh, fetchKeyRow, updateRow, openModal, saveKey, deleteKey, verifyKey, doLogout,
-      openUploadModal, closeUploadModal, resetUpload, doUpload,
+      openUploadModal, closeUploadModal, resetUpload, doUpload, batchRunning, batchVerifyCurrentPage,
     };
   },
 }).mount('#app');

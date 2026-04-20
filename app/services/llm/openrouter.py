@@ -14,7 +14,7 @@ class OpenRouterService:
           - 余额为负 → 429
           - 无效 key  → 401
           - 正常       → 200
-        tier = remaining_credits / 10
+        tier = 剩余余额（total_credits - total_usage），保留两位小数
         """
         headers = {"Authorization": f"Bearer {api_key}"}
         async with aiohttp.ClientSession(timeout=_TIMEOUT) as session:
@@ -32,10 +32,12 @@ class OpenRouterService:
                 usage = data.get("data", {}).get("total_usage", 0)
                 remaining = total - usage
 
-                if remaining <= 0:
-                    return {"status_code": 429, "tier": round(remaining / 10, 4), "body": body}
+                tier_val = round(remaining, 2)
 
-                return {"status_code": 200, "tier": round(remaining / 10, 4), "body": body}
+                if remaining <= 0:
+                    return {"status_code": 429, "tier": tier_val, "body": body}
+
+                return {"status_code": 200, "tier": tier_val, "body": body}
 
     @staticmethod
     async def batch_verify(api_keys: list[str], concurrent: int = 20) -> list[dict]:
