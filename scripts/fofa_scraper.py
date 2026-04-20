@@ -54,7 +54,7 @@ def _write_backup(keys: list[dict]) -> Path | None:
 
 
 async def main():
-    fofa_size = 8000
+    fofa_size = 5000
     scan_concurrent = 40
     verify_concurrent = 40
 
