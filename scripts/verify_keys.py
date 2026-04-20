@@ -18,7 +18,6 @@ sys.path.insert(0, str(project_root))
 from app.http_client import close_http_client
 from app.models.key import Key
 from app.services import key_service
-from app.services.key_service import _verify_dispatch, fetch_models_for
 from app.utils.concurrency import gather_limited
 
 
@@ -31,7 +30,7 @@ def _mask(key: str) -> str:
 async def _reverify_one(k: Key) -> tuple[int, int | None, int | None]:
     """校验单个 Key，更新 DB，返回 (id, old_code, new_code)。"""
     old_code = k.status_code
-    result = await _verify_dispatch(k.provider, k.key)
+    result = await key_service.verify_key(k.provider, k.key)
     new_code = result["status_code"]
     tier = str(result["tier"]) if result["tier"] is not None else None
 
@@ -39,7 +38,7 @@ async def _reverify_one(k: Key) -> tuple[int, int | None, int | None]:
     if tier is not None:
         update["tier"] = tier
     if new_code == 200:
-        models = await fetch_models_for(k.provider, k.key)
+        models = await key_service.fetch_models_for(k.provider, k.key)
         update["models"] = json.dumps(models, ensure_ascii=False) if models else None
     else:
         update["models"] = None
