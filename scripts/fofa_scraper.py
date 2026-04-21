@@ -25,8 +25,8 @@ from app.services.scanner_service import scan_urls
 def _build_query(provider: str) -> str:
     date = (datetime.now() - timedelta(days=random.randint(1, 365))).strftime("%Y-%m-%d")
     queries = {
-        "OpenAI":    f'(body="googlemap") && after="{date}"',
-        "Google":    f'(body="GEMINI_API_KEY" || body="gemini") && after="{date}"',
+        "OpenAI":    f'(body="sk-proj-" || body="sk-ant-api") && after="{date}"',
+        "Google":    f'(body="AIzaSy" || body="gemini" && body="key") && after="{date}"',
     }
     q = queries[provider]
     logger.info(f"FOFA 查询[{provider}]: {q}")

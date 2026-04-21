@@ -1,6 +1,6 @@
 import aiohttp
 
-TEST_MODEL = "gemini-2.5-flash"
+TEST_MODEL = "gemini-3-flash-preview"
 _TIMEOUT = aiohttp.ClientTimeout(total=120)
 
 
