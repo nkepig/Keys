@@ -1,7 +1,7 @@
 import base64
 import random
 
-import loguru
+from loguru import logger
 
 from app.config import settings
 from app.http_client import get_http_session
@@ -22,7 +22,7 @@ async def fofa_search(query: str, fields: str = "host", size: int = 10000) -> li
             resp.raise_for_status()
             data = await resp.json()
     except Exception as e:
-        loguru.error(f"FOFA 请求失败: {e}")
+        logger.error(f"FOFA 请求失败: {e}")
         return []
 
     hosts = set()
