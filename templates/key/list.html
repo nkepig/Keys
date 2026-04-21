@@ -283,6 +283,14 @@
       </button>
     </div>
     <div class="flex w-full md:w-auto gap-2.5">
+      <div class="flex-1 md:flex-none min-w-0">
+        <label class="sr-only" for="batch-verify-model">批量校验模型</label>
+        <input id="batch-verify-model"
+               v-model.trim="batchVerifyModel"
+               type="text"
+               placeholder="批量校验模型（可选）"
+               class="w-full md:w-[220px] px-3 py-2.5 rounded-xl text-sm bg-white/72 backdrop-blur-sm shadow-sm ring-1 ring-black/5 focus:ring-2 focus:ring-slate-400 outline-none placeholder:text-slate-400" />
+      </div>
       <button @click="openUploadModal"
               class="toolbar-btn btn-lift flex-1 md:flex-none bg-white/72 backdrop-blur-sm ring-1 ring-black/5 hover:bg-white hover:ring-slate-300 text-slate-600 hover:text-slate-900 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-sm text-sm font-medium">
         <i data-lucide="upload-cloud" class="w-4 h-4"></i> 批量上传
@@ -981,6 +989,7 @@ createApp({
     const copiedKey    = ref(null);
     const refreshCount = ref(0);    // 每次刷新自增，触发行重新动画
     const refreshDone  = ref(false); // 刷新完成闪光状态
+    const batchVerifyModel = ref('');
 
     // Modal：新增/编辑
     const showModal = ref(false);
@@ -1130,7 +1139,9 @@ createApp({
       try {
         const items = paginatedDisplayRows.value.filter(item => item && item.id != null && !verifyingMap[item.id]);
         if (items.length === 0) return;
-        await Promise.allSettled(items.map(item => verifyKey(item)));
+        const selectedModel = batchVerifyModel.value.trim();
+        await Promise.allSettled(items.map(item => verifyKey(item, { model: selectedModel || null, silent: true })));
+        showToast(selectedModel ? `本页批量校验完成（模型：${selectedModel}）` : '本页批量校验完成');
       } finally {
         batchRunning.value = false;
       }
@@ -1370,11 +1381,19 @@ createApp({
     };
 
     // ── 并发校验（支持同时校验多个密钥）────────────────
-    const verifyKey = async item => {
+    const verifyKey = async (item, options = {}) => {
       if (verifyingMap[item.id]) return;   // 防重入
+      const model = typeof options.model === 'string' ? options.model.trim() : '';
+      const silent = options.silent === true;
       verifyingMap[item.id] = true;
       try {
-        const res = await apiFetch(`/api/keys/${item.id}/verify`, { method: 'POST' });
+        const payload = {};
+        if (model) payload.model = model;
+        const res = await apiFetch(`/api/keys/${item.id}/verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
         if (!res) return;
         // 接口直接返回完整 Key 对象（已持久化），无需再发 GET，彻底消除竞争
         const updatedKey = await res.json();
@@ -1383,9 +1402,11 @@ createApp({
         verifyCache[item.id] = updatedKey;
 
         // 展示校验结果弹窗
-        verifyResultModal.key  = updatedKey;
-        verifyResultModal.show = true;
-        nextTick(() => lucide.createIcons());
+        if (!silent) {
+          verifyResultModal.key  = updatedKey;
+          verifyResultModal.show = true;
+          nextTick(() => lucide.createIcons());
+        }
       } finally {
         delete verifyingMap[item.id];
       }
@@ -1460,7 +1481,7 @@ createApp({
     onMounted(() => { fetchKeys(); lucide.createIcons(); });
 
     return {
-      keys, loading, searchQuery, providerFilter, statusFilter, sortBy, sortDesc, currentPage, pageSize,
+      keys, loading, searchQuery, providerFilter, statusFilter, sortBy, sortDesc, currentPage, pageSize, batchVerifyModel,
       processedKeys, totalPages, paginatedKeys, paginatedDisplayRows, displayPages, providerOptions,
       validCount, invalidCount,
       showModal, isEditing, form,

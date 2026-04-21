@@ -16,7 +16,7 @@ _TIMEOUT = aiohttp.ClientTimeout(total=120)
 
 class OpenAIService:
     @staticmethod
-    async def verify(api_key: str) -> dict:
+    async def verify(api_key: str, model: str | None = None) -> dict:
         """
         通过官方 HTTP API 校验 OpenAI key，返回 {"status_code": int, "tier": int | None}
         """
@@ -25,7 +25,7 @@ class OpenAIService:
             "Content-Type": "application/json",
         }
         payload = {
-            "model": TEST_MODEL,
+            "model": model or TEST_MODEL,
             "messages": [{"role": "user", "content": "1"}],
             "max_tokens": 5,
         }

@@ -6,7 +6,7 @@ _TIMEOUT = aiohttp.ClientTimeout(total=120)
 
 class OpenRouterService:
     @staticmethod
-    async def verify(api_key: str) -> dict:
+    async def verify(api_key: str, model: str | None = None) -> dict:
         """
         校验 OpenRouter key，返回 {"status_code": int, "tier": float | None}
 

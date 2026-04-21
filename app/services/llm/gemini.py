@@ -10,12 +10,12 @@ def _generate_url(model: str) -> str:
 
 class GeminiService:
     @staticmethod
-    async def verify(api_key: str) -> dict:
+    async def verify(api_key: str, model: str | None = None) -> dict:
         """
         通过官方 REST 校验 Gemini key，返回 {"status_code": int, "tier": None}
         状态码与 Google API HTTP 响应一致。
         """
-        url = _generate_url(TEST_MODEL)
+        url = _generate_url(model or TEST_MODEL)
         params = {"key": api_key}
         payload = {"contents": [{"parts": [{"text": "1"}]}]}
         async with aiohttp.ClientSession(timeout=_TIMEOUT) as session:

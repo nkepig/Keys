@@ -186,13 +186,13 @@ _MODEL_FETCHERS = {
 }
 
 
-async def verify_key(provider: str, key: str) -> dict:
+async def verify_key(provider: str, key: str, model: str | None = None) -> dict:
     """调用对应供应商的校验服务，返回 {status_code, tier}。"""
     service = _VERIFY_SERVICES.get(provider)
     if service is None:
         return {"status_code": None, "tier": None}
     try:
-        return await service.verify(key)
+        return await service.verify(key, model=model)
     except Exception:
         return {"status_code": None, "tier": None}
 

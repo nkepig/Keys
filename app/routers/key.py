@@ -47,6 +47,10 @@ class KeyUpdate(BaseModel):
     notes: Optional[str] = None
 
 
+class KeyVerify(BaseModel):
+    model: Optional[str] = None
+
+
 @router.get("/", response_class=HTMLResponse)
 def list_keys_page(request: Request):
     return templates.TemplateResponse(request, "key/list.html", {})
@@ -103,7 +107,7 @@ async def delete_key(key_id: int):
 
 
 @api_router.post("/keys/{key_id}/verify")
-async def verify_key(key_id: int):
+async def verify_key(key_id: int, body: Optional[KeyVerify] = None):
     key = await key_service.get_key(key_id)
     if not key:
         raise HTTPException(status_code=404, detail="Key 不存在")
@@ -112,7 +116,8 @@ async def verify_key(key_id: int):
     if not service:
         raise HTTPException(status_code=400, detail=f"不支持自动校验: {key.provider}")
 
-    result = await service.verify(key.key)
+    selected_model = body.model.strip() if body and body.model else None
+    result = await service.verify(key.key, model=selected_model)
     status_code = result["status_code"]
     tier_val = str(result["tier"]) if result["tier"] is not None else None
     verify_body = result.get("body")  # 原始响应体，透传给前端展示，不入库
