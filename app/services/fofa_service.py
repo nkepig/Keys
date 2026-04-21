@@ -1,6 +1,8 @@
 import base64
 import random
 
+import loguru
+
 from app.config import settings
 from app.http_client import get_http_session
 
@@ -15,12 +17,13 @@ async def fofa_search(query: str, fields: str = "host", size: int = 10000) -> li
         "fields": fields,
         "size": size,
     }
-    async with get_http_session().get(_BASE_URL, params=params) as resp:
-        resp.raise_for_status()
-        data = await resp.json()
-
-    if data.get("error"):
-        raise RuntimeError(f"FOFA 错误：{data.get('errmsg')}")
+    try:
+        async with get_http_session().get(_BASE_URL, params=params) as resp:
+            resp.raise_for_status()
+            data = await resp.json()
+    except Exception as e:
+        loguru.error(f"FOFA 请求失败: {e}")
+        return []
 
     hosts = set()
     for row in data.get("results", []):
