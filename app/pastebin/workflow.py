@@ -10,6 +10,7 @@ from typing import List, Optional
 
 from loguru import logger
 
+from app.db import init_db
 from app.http_client import close_http_client
 from app.pastebin.browser import AutoBrowseService
 from app.pastebin.scanner import scan_pastebin_urls
@@ -20,6 +21,7 @@ from app.pastebin.url_store import (
     init_urls_table_sqlite,
     load_existing_urls_sqlite,
 )
+from app.utils.scan_history import SCAN_HISTORY_MATCH_TARGET, SCAN_HISTORY_WINDOW_DAYS, load_recent_scan_history_targets, save_scan_history
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -177,6 +179,7 @@ async def run_pastebin_scrape(
     """
     sqlite_path = sqlite_path or default_sqlite_path()
     keys_json_path = keys_json_path or default_keys_json_path()
+    init_db()
 
     qlist = queries if queries else DEFAULT_QUERIES
 
@@ -278,11 +281,35 @@ async def run_pastebin_scrape(
             logger.warning("未收集到任何链接")
             return []
 
-        logger.info("开始扫描 {} 个链接…", len(all_links))
+        save_result = await batch_save_urls_sqlite(sqlite_path, all_links, source="pastebin")
+        logger.info(
+            "URL 已写入 SQLite: 新插入 {}, 跳过重复批次内 {}",
+            save_result["success"],
+            save_result["duplicate"],
+        )
+
+        history_urls = load_recent_scan_history_targets(
+            source="pastebin",
+            match_type=SCAN_HISTORY_MATCH_TARGET,
+            window_days=SCAN_HISTORY_WINDOW_DAYS,
+        )
+        scan_links = [url for url in all_links if url.strip() and url.strip() not in history_urls]
+        logger.info(
+            "按 {} 天历史表（URL）过滤: 跳过 {} 个重复链接，剩余 {} 个待扫描（历史 URL {}）",
+            SCAN_HISTORY_WINDOW_DAYS,
+            len(all_links) - len(scan_links),
+            len(scan_links),
+            len(history_urls),
+        )
+        if not scan_links:
+            logger.warning("过滤后命中历史表，无新链接可扫")
+            return []
+
+        logger.info("开始扫描 {} 个链接…", len(scan_links))
         scan_browser = AutoBrowseService(enable_turnstile_bypass=True, incognito=True)
         try:
             scan_results = await scan_pastebin_urls(
-                all_links,
+                scan_links,
                 concurrent=scan_concurrent,
                 browser=scan_browser,
             )
@@ -292,6 +319,9 @@ async def run_pastebin_scrape(
             except Exception:
                 pass
 
+        saved_history = save_scan_history(scan_links, source="pastebin", match_type=SCAN_HISTORY_MATCH_TARGET)
+        logger.info("扫描历史已写入 {} 个链接（保留 {} 天）", saved_history, SCAN_HISTORY_WINDOW_DAYS)
+
         if scan_results:
             ensure_parent_dir(keys_json_path)
             Path(keys_json_path).write_text(
@@ -299,13 +329,6 @@ async def run_pastebin_scrape(
                 encoding="utf-8",
             )
             logger.info("已将 {} 条密钥记录写入 {}", len(scan_results), keys_json_path)
-
-        save_result = await batch_save_urls_sqlite(sqlite_path, all_links, source="pastebin")
-        logger.info(
-            "URL 已写入 SQLite: 新插入 {}, 跳过重复批次内 {}",
-            save_result["success"],
-            save_result["duplicate"],
-        )
 
         if verify and scan_results:
             from app.services import key_service

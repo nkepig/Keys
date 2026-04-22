@@ -19,8 +19,9 @@ from app.db import init_db
 from app.http_client import close_http_client, get_http_session
 from app.services import key_service
 from app.services.scanner_service import scan_urls
-from app.utils.status_summary import count_status_codes, format_status_code_counts
 from app.utils.concurrency import gather_limited
+from app.utils.scan_history import SCAN_HISTORY_MATCH_TARGET, SCAN_HISTORY_WINDOW_DAYS, load_recent_scan_history_targets, save_scan_history
+from app.utils.status_summary import count_status_codes, format_status_code_counts
 
 BASE_URL = "https://www.kaggle.com"
 QUERIES = [
@@ -117,7 +118,26 @@ async def scan_and_save_keys(urls: list[str]) -> list[dict]:
         logger.warning("没有 URL 需要扫描")
         return []
 
-    scan_results = await scan_urls(urls, concurrent=1)
+    history_urls = load_recent_scan_history_targets(
+        source="kaggle",
+        match_type=SCAN_HISTORY_MATCH_TARGET,
+        window_days=SCAN_HISTORY_WINDOW_DAYS,
+    )
+    pending_urls = [url for url in urls if url.strip() and url.strip() not in history_urls]
+    logger.info(
+        "按 {} 天历史表（URL）过滤: 跳过 {} 个重复 URL，剩余 {} 个待扫描（历史 URL {}）",
+        SCAN_HISTORY_WINDOW_DAYS,
+        len(urls) - len(pending_urls),
+        len(pending_urls),
+        len(history_urls),
+    )
+    if not pending_urls:
+        logger.warning("过滤后命中历史表，无新 URL 可扫")
+        return []
+
+    scan_results = await scan_urls(pending_urls, concurrent=1)
+    saved_history = save_scan_history(pending_urls, source="kaggle", match_type=SCAN_HISTORY_MATCH_TARGET)
+    logger.info("扫描历史已写入 {} 个 URL（保留 {} 天）", saved_history, SCAN_HISTORY_WINDOW_DAYS)
 
     if not scan_results:
         logger.warning("页面扫描未找到任何密钥")

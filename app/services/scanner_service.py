@@ -36,8 +36,18 @@ async def scan_urls(hosts: list[str], concurrent: int = 40) -> list[dict]:
     并发抓取 hosts 列表的页面内容，提取全部匹配到的 API 密钥。
     返回去重后的 list[{provider, key, url}]。
     """
+    total = len(hosts)
+    logger.info("开始扫描 {} 个 URL，并发数: {}", total, concurrent)
+    completed_count = 0
+    progress_step = max(1, total // 10) if total else 1
+
     async def _one(host: str) -> list[dict]:
+        nonlocal completed_count
         url, text = await _fetch(host)
+        completed_count += 1
+        if completed_count % progress_step == 0 or completed_count == total:
+            pct = completed_count * 100 // total if total else 100
+            logger.info("扫描进度: {}/{} ({}%)", completed_count, total, pct)
         if not text:
             return []
         found = [{"provider": p, "key": k, "url": url} for p, k in detect_all_keys_from_text(text)]

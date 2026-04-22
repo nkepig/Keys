@@ -2,7 +2,7 @@
 """
 FOFA 搜索 → URL 扫描 → 密钥提取 → 批量验证入库
 
-扫站前会按库中 Key.origin 的 URL 与 FOFA 目标比对 netloc（与 scanner 写入的 https://host 结构一致），已存在则跳过。
+扫站前会按历史表中的站点 netloc 进行去重，7 天内扫描过则跳过。
 
 用法:
     python scripts/fofa_scraper.py
@@ -13,46 +13,31 @@ import random
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from urllib.parse import urlparse
 
 from loguru import logger
-from sqlmodel import Session, select
 
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from app.db import engine
+from app.db import init_db
 from app.http_client import close_http_client
-from app.models.key import Key
 from app.services import key_service
 from app.services.fofa_service import fofa_search
 from app.services.scanner_service import scan_urls
+from app.utils.scan_history import SCAN_HISTORY_MATCH_NETLOC, SCAN_HISTORY_WINDOW_DAYS, load_recent_scan_history_targets, normalize_netloc, prune_scan_history, save_scan_history
 from app.utils.status_summary import count_status_codes, format_status_code_counts
 
 
-def _netloc(s: str | None) -> str | None:
-    """与库里 origin 同一套 URL 结构：取 netloc（含端口），小写。无 scheme 时补 http:// 再解析。"""
-    if not s or not str(s).strip():
-        return None
-    t = str(s).strip()
-    if "://" not in t:
-        t = "http://" + t.split("/")[0]
-    try:
-        nl = urlparse(t).netloc.lower()
-        return nl or None
-    except Exception:
-        return None
-
-
 async def main():
-    fofa_size = 5000
+    init_db()
+    fofa_size = 10000
     scan_concurrent = 40
     verify_concurrent = 40
 
     try:
         date = (datetime.now() - timedelta(days=random.randint(1, 365))).strftime("%Y-%m-%d")
-        q_oai = f'(body="sk-proj-" || body="sk-ant-api") && after="{date}"'
-        q_ggl = f'(body="AIzaSy" || body="gemini" && body="key") && after="{date}"'
+        q_oai = f'(body="gemini") && after="{date}"'
+        q_ggl = f'(body="AIzaSy" || body="google" && body="key") && after="{date}"'
         logger.info(f"FOFA 查询[OpenAI]: {q_oai}")
         logger.info(f"FOFA 查询[Google]: {q_ggl}")
 
@@ -67,18 +52,30 @@ async def main():
             logger.warning("FOFA 未返回任何目标，退出")
             return
 
-        with Session(engine) as session:
-            known = {_netloc(o) for o in session.exec(select(Key.origin)).all()}
-        known.discard(None)
+        pruned = prune_scan_history(window_days=SCAN_HISTORY_WINDOW_DAYS)
+        known = load_recent_scan_history_targets(
+            source="fofa",
+            match_type=SCAN_HISTORY_MATCH_NETLOC,
+            window_days=SCAN_HISTORY_WINDOW_DAYS,
+        )
 
         n0 = len(hosts)
-        hosts = [x for x in hosts if (n := _netloc(x)) is None or n not in known]
-        logger.info(f"按库内来源 URL（netloc）过滤: 跳过 {n0 - len(hosts)} 个重复站点，剩余 {len(hosts)} 个待扫描（库内不同来源 {len(known)}）")
+        hosts = [x for x in hosts if (n := normalize_netloc(x)) is None or n not in known]
+        logger.info(
+            "按 {} 天历史表（netloc）过滤: 跳过 {} 个重复站点，剩余 {} 个待扫描（历史站点 {}，清理过期 {}）",
+            SCAN_HISTORY_WINDOW_DAYS,
+            n0 - len(hosts),
+            len(hosts),
+            len(known),
+            pruned,
+        )
         if not hosts:
-            logger.warning("过滤后与库重复，无新站点可扫，退出")
+            logger.warning("过滤后命中历史表，无新站点可扫，退出")
             return
 
         all_keys = await scan_urls(hosts, concurrent=scan_concurrent)
+        saved_history = save_scan_history(hosts, source="fofa", match_type=SCAN_HISTORY_MATCH_NETLOC)
+        logger.info("扫描历史已写入 {} 个站点（保留 {} 天）", saved_history, SCAN_HISTORY_WINDOW_DAYS)
 
         if all_keys:
             out_dir = project_root / "tmp"
