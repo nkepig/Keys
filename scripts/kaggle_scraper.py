@@ -19,6 +19,7 @@ from app.db import init_db
 from app.http_client import close_http_client, get_http_session
 from app.services import key_service
 from app.services.scanner_service import scan_urls
+from app.utils.status_summary import count_status_codes, format_status_code_counts
 from app.utils.concurrency import gather_limited
 
 BASE_URL = "https://www.kaggle.com"
@@ -132,6 +133,7 @@ async def scan_and_save_keys(urls: list[str]) -> list[dict]:
         f"📊 密钥入库统计: 总计 {len(results)} | 成功 {saved} | 其他 {len(results) - saved}\n"
         f"{'='*55}"
     )
+    logger.info("校验状态码统计: {}", format_status_code_counts(count_status_codes(results)))
     return results
 
 

@@ -18,6 +18,7 @@ sys.path.insert(0, str(project_root))
 from app.http_client import close_http_client
 from app.models.key import Key
 from app.services import key_service
+from app.utils.status_summary import format_status_code_counts
 from app.utils.concurrency import gather_limited
 
 
@@ -81,6 +82,10 @@ async def reverify_all(concurrent: int = 20) -> None:
         logger.info("本次校验无状态变更")
 
     logger.info(f"{'='*55}")
+    status_counts: dict[int | None, int] = {}
+    for _, _, new in results:
+        status_counts[new] = status_counts.get(new, 0) + 1
+    logger.info("本次校验状态码统计: {}", format_status_code_counts(status_counts))
     logger.success(f"校验完成：处理 {len(targets)} 条，变更 {len(changes)} 条")
 
 

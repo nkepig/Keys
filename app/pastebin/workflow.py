@@ -309,6 +309,7 @@ async def run_pastebin_scrape(
 
         if verify and scan_results:
             from app.services import key_service
+            from app.utils.status_summary import count_status_codes, format_status_code_counts
 
             logger.info("开始批量校验 {} 个密钥…", len(scan_results))
             results = await key_service.batch_process_keys(
@@ -324,6 +325,7 @@ async def run_pastebin_scrape(
                 len(results) - saved,
                 "=" * 55,
             )
+            logger.info("校验状态码统计: {}", format_status_code_counts(count_status_codes(results)))
 
         return scan_results
 

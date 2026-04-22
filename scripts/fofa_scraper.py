@@ -27,6 +27,7 @@ from app.models.key import Key
 from app.services import key_service
 from app.services.fofa_service import fofa_search
 from app.services.scanner_service import scan_urls
+from app.utils.status_summary import count_status_codes, format_status_code_counts
 
 
 def _netloc(s: str | None) -> str | None:
@@ -113,6 +114,7 @@ async def main():
             f"密钥入库统计: 总计 {len(results)} | 成功 {saved} | 失败 {len(results) - saved}\n"
             f"{'='*55}"
         )
+        logger.info("校验状态码统计: {}", format_status_code_counts(count_status_codes(results)))
 
     except RuntimeError as e:
         logger.error(f"FOFA 请求失败: {e}")

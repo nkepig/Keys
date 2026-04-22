@@ -20,6 +20,7 @@ sys.path.insert(0, str(project_root))
 from app.db import init_db
 from app.http_client import close_http_client, get_http_session
 from app.services import key_service
+from app.utils.status_summary import count_status_codes, format_status_code_counts
 from app.utils.concurrency import gather_limited
 
 BASE_URL = "https://huggingface.co"
@@ -126,6 +127,7 @@ async def main():
                     f"总计 {len(results)} | 成功入库 {saved} | 其他 {len(results) - saved}\n"
                     f"{'='*55}"
                 )
+                logger.info("第 {} 轮校验状态码统计: {}", round_count, format_status_code_counts(count_status_codes(results)))
 
             logger.info(f"⏳ 等待 2 秒后开始第 {round_count + 1} 轮...")
             await asyncio.sleep(2)
