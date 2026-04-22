@@ -26,8 +26,7 @@ class OpenAIService:
         }
         payload = {
             "model": model or TEST_MODEL,
-            "messages": [{"role": "user", "content": "1"}],
-            "max_tokens": 5,
+            "messages": [{"role": "user", "content": "1"}]
         }
         async with aiohttp.ClientSession(timeout=_TIMEOUT) as session:
             async with session.post(CHAT_URL, headers=headers, json=payload) as resp:
