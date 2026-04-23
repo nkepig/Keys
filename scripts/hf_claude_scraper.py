@@ -36,7 +36,7 @@ _KEY_PATTERN = re.compile(r"ant-(api|sid)(\d{2})-([A-Za-z0-9_-]{10,})")
 def generate_random_query() -> str:
     """生成随机查询关键词 k-ant-api03-[a-zA-Z0-9][a-zA-Z0-9]"""
     chars = string.ascii_letters + string.digits
-    return f"k-ant-api03-{random.choice(chars)}{random.choice(chars)}"
+    return f"k-ant-api03-{random.choice(chars)}"
 
 
 async def search_huggingface(q: str, limit: int = 20, skip: int = 0) -> dict:
