@@ -2,10 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-import json
-import os
 import random
-from pathlib import Path
 from typing import List, Optional
 
 from loguru import logger
@@ -14,35 +11,12 @@ from app.db import init_db
 from app.http_client import close_http_client
 from app.pastebin.browser import AutoBrowseService
 from app.pastebin.scanner import scan_pastebin_urls
-from app.pastebin.url_store import (
-    batch_save_urls_sqlite,
-    filter_new_urls_local,
-    ensure_parent_dir,
-    init_urls_table_sqlite,
-    load_existing_urls_sqlite,
-)
 from app.utils.scan_history import SCAN_HISTORY_MATCH_TARGET, SCAN_HISTORY_WINDOW_DAYS, load_recent_scan_history_targets, save_scan_history
-
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 BASE_URL = "https://pastebin.com"
 SEARCH_URL = f"{BASE_URL}/search"
 
 DEFAULT_QUERIES = ["sk-", "openai", "api_key", "AIzaSy", "gemini"]
-
-
-def default_sqlite_path() -> str:
-    return os.environ.get(
-        "PASTEBIN_SCRAPER_SQLITE",
-        str(_PROJECT_ROOT / "data" / "pastebin_scraper_urls.sqlite"),
-    )
-
-
-def default_keys_json_path() -> str:
-    return os.environ.get(
-        "PASTEBIN_SCRAPER_KEYS_JSON",
-        str(_PROJECT_ROOT / "data" / "pastebin_scraper_keys.json"),
-    )
 
 
 def pick_account(accounts: list[str]) -> Optional[str]:
@@ -166,26 +140,18 @@ async def run_pastebin_scrape(
     pastebin_password: str,
     pastebin_accounts: list[str],
     queries: list[str] | None = None,
-    sqlite_path: str | None = None,
-    keys_json_path: str | None = None,
     scan_concurrent: int = 2,
     verify_concurrent: int = 40,
     verify: bool = True,
 ) -> list[dict]:
     """
-    登录 Pastebin → 收集搜索链接 → 浏览器扫描页面 → 写 JSON / URL 库 → 可选 batch_process_keys 入库。
+    登录 Pastebin → 收集搜索链接 → 浏览器扫描页面 → 可选 batch_process_keys 入库。
 
     账号密码与搜索词由调用方（如 scripts/pastebin_scraper.py）传入。
     """
-    sqlite_path = sqlite_path or default_sqlite_path()
-    keys_json_path = keys_json_path or default_keys_json_path()
     init_db()
 
     qlist = queries if queries else DEFAULT_QUERIES
-
-    await init_urls_table_sqlite(sqlite_path)
-    existing_urls = await load_existing_urls_sqlite(sqlite_path)
-    logger.info("已从 SQLite 加载 {} 个已存在 URL", len(existing_urls))
 
     all_links: List[str] = []
     remaining_urls = generate_search_urls(qlist)
@@ -230,21 +196,8 @@ async def run_pastebin_scrape(
 
                         if isinstance(links, list):
                             if links:
-                                new_links = await filter_new_urls_local(links, existing_urls)
-                                dup = len(links) - len(new_links)
-                                if dup > 0:
-                                    logger.info("过滤掉 {} 个重复 URL", dup)
-                                if new_links:
-                                    all_links.extend(new_links)
-                                    existing_urls.update(new_links)
-                                    logger.info(
-                                        "{} 完成，{} 个新链接（共 {}）",
-                                        search_url,
-                                        len(new_links),
-                                        len(links),
-                                    )
-                                else:
-                                    logger.info("{} 共 {} 个链接均为重复", search_url, len(links))
+                                all_links.extend(links)
+                                logger.info("{} 完成，{} 个链接", search_url, len(links))
                             else:
                                 logger.info("{} 无搜索结果", search_url)
                             processed_urls.append(search_url)
@@ -281,13 +234,6 @@ async def run_pastebin_scrape(
             logger.warning("未收集到任何链接")
             return []
 
-        save_result = await batch_save_urls_sqlite(sqlite_path, all_links, source="pastebin")
-        logger.info(
-            "URL 已写入 SQLite: 新插入 {}, 跳过重复批次内 {}",
-            save_result["success"],
-            save_result["duplicate"],
-        )
-
         history_urls = load_recent_scan_history_targets(
             source="pastebin",
             match_type=SCAN_HISTORY_MATCH_TARGET,
@@ -323,12 +269,7 @@ async def run_pastebin_scrape(
         logger.info("扫描历史已写入 {} 个链接（保留 {} 天）", saved_history, SCAN_HISTORY_WINDOW_DAYS)
 
         if scan_results:
-            ensure_parent_dir(keys_json_path)
-            Path(keys_json_path).write_text(
-                json.dumps(scan_results, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-            logger.info("已将 {} 条密钥记录写入 {}", len(scan_results), keys_json_path)
+            logger.info("发现 {} 条密钥记录", len(scan_results))
 
         if verify and scan_results:
             from app.services import key_service

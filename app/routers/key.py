@@ -8,6 +8,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from app.services import key_service
+from app.services import scanner_service
 from app.services.llm.claude import ClaudeService
 from app.services.llm.gemini import GeminiService
 from app.services.llm.openai import OpenAIService
@@ -35,6 +36,10 @@ class KeyUpload(BaseModel):
     keys: str
     origin: Optional[str] = None
     concurrent: int = 10
+
+
+class UrlBatchRequest(BaseModel):
+    urls_text: str
 
 
 class KeyUpdate(BaseModel):
@@ -77,6 +82,27 @@ async def upload_keys(body: KeyUpload):
     )
     saved = sum(1 for r in results if r["saved"])
     return {"total": len(results), "saved": saved, "failed": len(results) - saved, "results": results}
+
+
+@api_router.post("/keys/batch_urls")
+async def batch_urls(body: UrlBatchRequest):
+    # Parse newline-delimited URLs, ignore blanks
+    urls = [line.strip() for line in body.urls_text.splitlines() if line.strip()]
+    if not urls:
+        return {"total": 0, "saved": 0, "failed": 0, "results": []}
+
+    # Scan URLs for keys using existing project patterns
+    scan_results = await scanner_service.scan_urls(urls, concurrent=40)
+
+    # Prepare payloads for the existing save/verify pipeline: {key, origin}
+    to_save = [{"key": r.get("key"), "origin": r.get("url")} for r in scan_results if r.get("key") and r.get("url")]
+
+    # Persist discovered keys through the existing pipeline
+    results = await key_service.batch_process_keys(to_save)
+
+    saved = sum(1 for r in results if r.get("saved"))
+    total = len(to_save)
+    return {"total": total, "saved": saved, "failed": total - saved, "results": results}
 
 
 @api_router.get("/keys/{key_id}")

@@ -28,11 +28,7 @@ PASTEBIN_ACCOUNTS = [
     "1775617437",
 ]
 
-QUERIES = ["sk-", "openai", "api_key", "AIzaSy", "gemini"]
-
-# None 表示使用默认：data/pastebin_scraper_urls.sqlite、data/pastebin_scraper_keys.json
-SQLITE_PATH: str | None = None
-KEYS_JSON_PATH: str | None = None
+QUERIES = ["sk-", "openai", "api_key", "AIzaSy", "gemini","sk-ant-api03-"]
 
 VERIFY = True
 SCAN_CONCURRENT = 2
@@ -42,6 +38,9 @@ VERIFY_CONCURRENT = 40
 async def main() -> None:
     from loguru import logger
 
+    logger.remove()
+    logger.add(sys.stderr, level="ERROR")
+
     from app.pastebin.workflow import run_pastebin_scrape
 
     try:
@@ -49,15 +48,11 @@ async def main() -> None:
             pastebin_password=PASTEBIN_PASSWORD,
             pastebin_accounts=PASTEBIN_ACCOUNTS,
             queries=QUERIES,
-            sqlite_path=SQLITE_PATH,
-            keys_json_path=KEYS_JSON_PATH,
             scan_concurrent=SCAN_CONCURRENT,
             verify_concurrent=VERIFY_CONCURRENT,
             verify=VERIFY,
         )
-        if scan_results:
-            logger.info("运行结束，共 {} 条密钥记录（见 JSON）", len(scan_results))
-        else:
+        if not scan_results:
             logger.warning("未发现任何密钥或未收集到链接")
     except Exception as e:
         logger.exception("程序异常: {}", e)

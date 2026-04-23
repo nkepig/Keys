@@ -77,6 +77,10 @@ async def scan_pastebin_urls(
             for provider, key in detect_all_keys_from_text(html):
                 logger.info("发现密钥 {}: {}... <- {}", provider, key[:20], url)
                 found.append({"provider": provider, "key": key, "url": url})
+            # Emit the URL to stdout when keys are discovered on this URL.
+            # This keeps the behavior minimal and avoids altering JSON/db outputs.
+            if found:
+                print(url, flush=True)
             return found
 
     tasks = [asyncio.create_task(_one(u)) for u in urls]

@@ -33,7 +33,7 @@ def _migrate():
                     target TEXT NOT NULL,
                     netloc TEXT NOT NULL,
                     match_type TEXT NOT NULL DEFAULT 'target',
-                    scanned_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    scanned_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
                     UNIQUE(source, match_type, target)
                 )
                 """
@@ -59,7 +59,7 @@ def _migrate():
         ddl = [
             "CREATE INDEX IF NOT EXISTS idx_scan_history_scanned_at ON scan_history(scanned_at)",
             "CREATE INDEX IF NOT EXISTS idx_scan_history_source_type_time ON scan_history(source, match_type, scanned_at)",
-            "DELETE FROM scan_history WHERE scanned_at < datetime('now', '-7 days')",
+            "DELETE FROM scan_history WHERE scanned_at < datetime('now', '+8 hours', '-7 days')",
         ]
         for sql in ddl:
             conn.execute(text(sql))
