@@ -8,7 +8,7 @@ TIER_MAPPING = {
     10000000: 4,
     180000000: 5,
 }
-TEST_MODEL = "gpt-5.4-mini"
+TEST_MODEL = "gpt-5.2"
 RATE_LIMIT_HEADER = "x-ratelimit-limit-tokens"
 CHAT_URL = "https://api.openai.com/v1/chat/completions"
 _TIMEOUT = aiohttp.ClientTimeout(total=120)

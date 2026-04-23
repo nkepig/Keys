@@ -476,7 +476,7 @@
             <td class="px-2 py-2">
               <div class="flex items-center justify-center gap-1 opacity-40 group-hover:opacity-100 transition-opacity duration-200">
                 <!-- 校验（支持同时多个并发）-->
-                <button @click="verifyKey(item)" :disabled="verifyingMap[item.id]"
+                <button @click="verifyKey(item, { model: batchVerifyModel.trim() || null })" :disabled="verifyingMap[item.id]"
                         :class="verifyingMap[item.id]
                           ? 'text-blue-400 cursor-wait bg-blue-50/60'
                           : 'text-[#5a9a78] hover:bg-[#e8f4ee]'"
