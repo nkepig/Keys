@@ -21,7 +21,6 @@ from app.db import init_db
 from app.http_client import close_http_client, get_http_session
 from app.services import key_service
 from app.utils.concurrency import gather_limited
-from app.utils.scan_history import SCAN_HISTORY_MATCH_TARGET, SCAN_HISTORY_WINDOW_DAYS, load_recent_scan_history_targets, save_scan_history
 from app.utils.status_summary import count_status_codes, format_status_code_counts
 
 BASE_URL = "https://huggingface.co"
@@ -102,10 +101,6 @@ async def search_and_extract_keys(q: str) -> list[str]:
     return all_keys
 
 
-def _history_target(query: str, skip: int) -> str:
-    return f"{query}::skip={skip}"
-
-
 async def main():
     init_db()
     round_count = 0
@@ -116,23 +111,7 @@ async def main():
             query = generate_random_query()
             logger.info(f"🔄 第 {round_count} 轮 | 关键词: {query}")
 
-            history_target = _history_target(query, 0)
-            history_queries = load_recent_scan_history_targets(
-                source="hf_openai_query",
-                match_type=SCAN_HISTORY_MATCH_TARGET,
-                window_days=SCAN_HISTORY_WINDOW_DAYS,
-            )
-            if history_target in history_queries:
-                logger.info(
-                    "按 {} 天历史表（查询）跳过本轮关键词: {}",
-                    SCAN_HISTORY_WINDOW_DAYS,
-                    query,
-                )
-                await asyncio.sleep(2)
-                continue
-
             keys = await search_and_extract_keys(q=query)
-            save_scan_history([history_target], source="hf_openai_query", match_type=SCAN_HISTORY_MATCH_TARGET)
             unique_keys = list(dict.fromkeys(keys))
             logger.success(f"✅ 本轮找到 {len(unique_keys)} 个唯一密钥")
 
