@@ -17,7 +17,7 @@ class GeminiService:
         """
         url = _generate_url(model or TEST_MODEL)
         params = {"key": api_key}
-        payload = {"contents": [{"parts": [{"text": "1"}]}]}
+        payload = {"contents": [{"parts": [{"text": "say hello to me"}]}]}
         async with aiohttp.ClientSession(timeout=_TIMEOUT) as session:
             async with session.post(url, params=params, json=payload) as resp:
                 try:

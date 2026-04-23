@@ -27,7 +27,7 @@ class ClaudeService:
         payload = {
             "model": model or TEST_MODEL,
             "max_tokens": 10,
-            "messages": [{"role": "user", "content": "1"}],
+            "messages": [{"role": "user", "content": "say hello to me"}],
         }
         async with aiohttp.ClientSession(timeout=_TIMEOUT) as session:
             async with session.post(MESSAGES_URL, headers=headers, json=payload) as resp:
