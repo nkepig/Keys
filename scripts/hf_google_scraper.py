@@ -28,7 +28,7 @@ BASE_URL = "https://huggingface.co"
 API_URL = f"{BASE_URL}/api/search/full-text"
 
 _HEADERS = {
-    "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+    "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
 }
 
 _KEY_PATTERN = re.compile(r"AIzaSy[A-Za-z0-9_-]{30,}")
