@@ -35,9 +35,9 @@ async def main():
     verify_concurrent = 40
 
     try:
-        date = (datetime.now() - timedelta(days=random.randint(1, 365))).strftime("%Y-%m-%d")
-        q_oai = f'(body="google") && (body="api" || body="key")'
-        q_ggl = f'(body="AIzaSy{random.choice("ABCD")}")'
+        date = (datetime.now() - timedelta(days=random.randint(1, 730))).strftime("%Y-%m-%d")
+        q_oai = f'(body="gemini") || (body="api" || body="key") after="{date}"'
+        q_ggl = f'(body="AIzaSy{random.choice("ABCD")}") after="{date}"'
         logger.info(f"FOFA 查询[OpenAI]: {q_oai}")
         logger.info(f"FOFA 查询[Google]: {q_ggl}")
 

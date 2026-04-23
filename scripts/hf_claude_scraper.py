@@ -32,7 +32,6 @@ _HEADERS = {
 # 与 app/services/key_service.py Anthropic 规则一致：sk-ant-(api|sid)\d{2}-...
 _KEY_PATTERN = re.compile(r"ant-(api|sid)(\d{2})-([A-Za-z0-9_-]{10,})")
 
-
 def generate_random_query() -> str:
     """生成随机查询关键词 k-ant-api03-[a-zA-Z0-9][a-zA-Z0-9]"""
     chars = string.ascii_letters + string.digits
