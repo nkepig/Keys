@@ -27,7 +27,7 @@ BASE_URL = "https://huggingface.co"
 API_URL = f"{BASE_URL}/api/search/full-text"
 
 _HEADERS = {
-    "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+    "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
 }
 
 # 与 app/services/key_service.py Anthropic 规则一致：sk-ant-(api|sid)\d{2}-...
