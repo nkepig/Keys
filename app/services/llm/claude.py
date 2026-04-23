@@ -7,7 +7,7 @@ TIER_MAPPING = {
     200000: 3,
     400000: 4,
 }
-TEST_MODEL = "claude-3-5-haiku-20241022"
+TEST_MODEL = "claude-haiku-4-5-20251001"
 RATE_LIMIT_HEADER = "anthropic-ratelimit-input-tokens-limit"
 MESSAGES_URL = "https://api.anthropic.com/v1/messages"
 _TIMEOUT = aiohttp.ClientTimeout(total=120)
@@ -26,7 +26,6 @@ class ClaudeService:
         }
         payload = {
             "model": model or TEST_MODEL,
-            "max_tokens": 10,
             "messages": [{"role": "user", "content": "say hello to me"}],
         }
         async with aiohttp.ClientSession(timeout=_TIMEOUT) as session:

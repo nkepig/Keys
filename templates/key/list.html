@@ -96,7 +96,11 @@
       background-color: rgba(228,230,235,.55) !important;
       box-shadow: inset 3px 0 0 rgba(71,85,105,.50);
     }
-    .row-item td { overflow: hidden; }
+    .row-item td {
+      overflow: hidden;
+      height: 46px;
+      vertical-align: middle;
+    }
     .row-item td:first-child {
       transition: padding-left .18s ease-in-out;
     }
@@ -474,7 +478,7 @@
 
             <!-- 操作按钮（并发校验：verifyingMap）-->
             <td class="px-2 py-2">
-              <div class="flex items-center justify-center gap-1 opacity-40 group-hover:opacity-100 transition-opacity duration-200">
+              <div class="h-7 flex items-center justify-center gap-1 opacity-40 group-hover:opacity-100 transition-opacity duration-200">
                 <!-- 校验（支持同时多个并发）-->
                 <button @click="verifyKey(item, { model: batchVerifyModel.trim() || null })" :disabled="verifyingMap[item.id]"
                         :class="verifyingMap[item.id]
