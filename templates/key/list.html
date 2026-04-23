@@ -241,23 +241,23 @@
   </header>
 
   <!-- ── 工具栏 ──────────────────────────────────────── -->
-  <div class="flex flex-col md:flex-row justify-between items-center gap-3 mb-5">
-    <div class="flex w-full md:w-auto gap-2.5 flex-wrap items-center">
+  <div class="flex items-center gap-2.5 mb-5 overflow-x-auto no-scrollbar">
+    <div class="flex min-w-0 flex-1 items-center gap-2.5">
       <!-- 搜索 -->
-      <div class="relative w-full md:w-72">
+      <div class="relative min-w-0 flex-[1.2]">
         <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none"></i>
         <input v-model="searchQuery" type="text" placeholder="搜索密钥 / 来源 / 备注…"
                class="w-full pl-9 pr-4 py-2.5 rounded-xl focus:ring-2 focus:ring-slate-400 outline-none text-sm bg-white/72 backdrop-blur-sm shadow-sm ring-1 ring-black/5 focus:bg-white" />
       </div>
       <!-- Provider 筛选 -->
       <select v-model="providerFilter"
-              class="px-3 py-2.5 rounded-xl text-sm bg-white/72 backdrop-blur-sm shadow-sm ring-1 ring-black/5 focus:ring-2 focus:ring-slate-400 outline-none cursor-pointer hover:bg-white">
+              class="min-w-0 flex-1 px-3 py-2.5 rounded-xl text-sm bg-white/72 backdrop-blur-sm shadow-sm ring-1 ring-black/5 focus:ring-2 focus:ring-slate-400 outline-none cursor-pointer hover:bg-white">
         <option value="all">全部供应商</option>
         <option v-for="p in providerOptions" :key="p" :value="p">[[ p ]]</option>
       </select>
       <!-- 状态码筛选（已移除"未验证"选项）-->
       <select v-model="statusFilter"
-              class="px-3 py-2.5 rounded-xl text-sm bg-white/72 backdrop-blur-sm shadow-sm ring-1 ring-black/5 focus:ring-2 focus:ring-slate-400 outline-none cursor-pointer hover:bg-white">
+              class="min-w-0 flex-1 px-3 py-2.5 rounded-xl text-sm bg-white/72 backdrop-blur-sm shadow-sm ring-1 ring-black/5 focus:ring-2 focus:ring-slate-400 outline-none cursor-pointer hover:bg-white">
         <option value="all">全部状态</option>
         <option value="200">200 · 有效</option>
         <option value="400">400 · 错误请求</option>
@@ -276,7 +276,7 @@
                   : refreshDone
                     ? 'bg-emerald-50 text-emerald-600 ring-emerald-200 refresh-done'
                     : 'bg-white/72 text-slate-600 ring-black/5 hover:bg-white hover:text-slate-900 hover:ring-slate-300',
-                'toolbar-btn btn-lift flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl shadow-sm ring-1 text-sm font-medium transition-all'
+                'toolbar-btn btn-lift inline-flex items-center justify-center gap-1.5 min-w-[108px] px-3.5 py-2.5 rounded-xl shadow-sm ring-1 text-sm font-medium transition-all'
               ]">
         <svg :class="loading?'spin':''" class="w-4 h-4 shrink-0" xmlns="http://www.w3.org/2000/svg"
              viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
@@ -284,34 +284,34 @@
           <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
           <path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>
         </svg>
-        <span class="hidden sm:inline">[[ loading ? '刷新中…' : refreshDone ? '已刷新 ✓' : '刷新' ]]</span>
+        <span class="hidden sm:inline text-center">[[ loading ? '刷新中…' : refreshDone ? '已刷新 ✓' : '刷新' ]]</span>
       </button>
     </div>
-    <div class="flex w-full md:w-auto gap-2.5">
-      <div class="flex-1 md:flex-none min-w-0">
+    <div class="flex shrink-0 items-center gap-2.5">
+      <div class="min-w-0 w-[180px]">
         <label class="sr-only" for="batch-verify-model">批量校验模型</label>
         <input id="batch-verify-model"
-               v-model.trim="batchVerifyModel"
-               type="text"
-               placeholder="批量校验模型（可选）"
-               class="w-full md:w-[220px] px-3 py-2.5 rounded-xl text-sm bg-white/72 backdrop-blur-sm shadow-sm ring-1 ring-black/5 focus:ring-2 focus:ring-slate-400 outline-none placeholder:text-slate-400" />
+                v-model.trim="batchVerifyModel"
+                type="text"
+                placeholder="批量校验模型（可选）"
+                class="w-full px-3 py-2.5 rounded-xl text-sm bg-white/72 backdrop-blur-sm shadow-sm ring-1 ring-black/5 focus:ring-2 focus:ring-slate-400 outline-none placeholder:text-slate-400" />
       </div>
       <button @click="openUploadModal"
-              class="toolbar-btn btn-lift flex-1 md:flex-none bg-white/72 backdrop-blur-sm ring-1 ring-black/5 hover:bg-white hover:ring-slate-300 text-slate-600 hover:text-slate-900 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-sm text-sm font-medium">
+              class="toolbar-btn btn-lift shrink-0 bg-white/72 backdrop-blur-sm ring-1 ring-black/5 hover:bg-white hover:ring-slate-300 text-slate-600 hover:text-slate-900 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-sm text-sm font-medium whitespace-nowrap">
         <i data-lucide="upload-cloud" class="w-4 h-4"></i> 批量上传
       </button>
       <button @click="batchVerifyCurrentPage"
               :disabled="loading || paginatedDisplayRows.length===0 || batchRunning"
-              class="toolbar-btn btn-lift flex-1 md:flex-none bg-white/72 backdrop-blur-sm ring-1 ring-black/5 hover:bg-white hover:ring-slate-300 text-slate-600 hover:text-slate-900 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-sm text-sm font-medium">
+              class="toolbar-btn btn-lift shrink-0 bg-white/72 backdrop-blur-sm ring-1 ring-black/5 hover:bg-white hover:ring-slate-300 text-slate-600 hover:text-slate-900 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-sm text-sm font-medium whitespace-nowrap">
         <i data-lucide="check-circle" class="w-4 h-4"></i> 批量校验本页
       </button>
       <button @click="copyCurrentPageKeys"
               :disabled="loading || paginatedDisplayRows.length===0"
-              class="toolbar-btn btn-lift flex-1 md:flex-none bg-white/72 backdrop-blur-sm ring-1 ring-black/5 hover:bg-white hover:ring-slate-300 text-slate-600 hover:text-slate-900 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-sm text-sm font-medium">
+              class="toolbar-btn btn-lift shrink-0 bg-white/72 backdrop-blur-sm ring-1 ring-black/5 hover:bg-white hover:ring-slate-300 text-slate-600 hover:text-slate-900 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-sm text-sm font-medium whitespace-nowrap">
         <i data-lucide="copy" class="w-4 h-4"></i> 一键复制本页
       </button>
       <button @click="openModal(false)"
-              class="btn-lift flex-1 md:flex-none bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-md shadow-slate-700/25 text-sm font-medium">
+              class="btn-lift shrink-0 bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-md shadow-slate-700/25 text-sm font-medium whitespace-nowrap">
         <i data-lucide="plus" class="w-4 h-4"></i> 新增密钥
       </button>
     </div>
