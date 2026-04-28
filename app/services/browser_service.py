@@ -1,8 +1,12 @@
-"""DrissionPage 浏览器封装（Turnstile / 验证码）。"""
-from __future__ import annotations
+"""Browser 自动化公共方法服务。
+
+封装 Chromium (DrissionPage) 的启动、关闭、Cloudflare Turnstile 绕过，
+以及 ddddocr 验证码识别等通用浏览器操作。
+"""
 
 import os
 import platform
+import random
 import shutil
 import tempfile
 import time
@@ -19,12 +23,8 @@ class AutoBrowseService:
     "version": "2.1",
     "content_scripts": [
         {
-            "js": [
-                "./script.js"
-            ],
-            "matches": [
-                "<all_urls>"
-            ],
+            "js": ["./script.js"],
+            "matches": ["<all_urls>"],
             "run_at": "document_start",
             "all_frames": true,
             "world": "MAIN"
@@ -35,10 +35,8 @@ class AutoBrowseService:
     EXTENSION_SCRIPT = """function getRandomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
-
 let screenX = getRandomInt(800, 1200);
 let screenY = getRandomInt(400, 600);
-
 Object.defineProperty(MouseEvent.prototype, 'screenX', { value: screenX });
 Object.defineProperty(MouseEvent.prototype, 'screenY', { value: screenY });"""
 
@@ -47,10 +45,8 @@ window.dtp = 1;
 function getRandomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
-
 let screenX = getRandomInt(800, 1200);
 let screenY = getRandomInt(400, 600);
-
 Object.defineProperty(MouseEvent.prototype, 'screenX', { value: screenX });
 Object.defineProperty(MouseEvent.prototype, 'screenY', { value: screenY });"""
 
@@ -59,21 +55,23 @@ Object.defineProperty(MouseEvent.prototype, 'screenY', { value: screenY });"""
         incognito: bool = False,
         headless: bool = False,
         enable_turnstile_bypass: bool = True,
+        browser_path: str = None,
     ) -> None:
         self.co = ChromiumOptions()
         if incognito:
             self.co.incognito()
         if headless:
-            self.co.headless()
-            try:
-                self.co.set_argument("--headless=new")
-            except Exception:
-                pass
+            self.co.headless(True)
+            self.co.set_argument("--headless=new")
+
+        if browser_path:
+            self.co.set_paths(browser_path=browser_path)
 
         if platform.system() == "Linux":
             try:
                 self.co.set_argument("--no-sandbox")
                 self.co.set_argument("--disable-dev-shm-usage")
+                self.co.set_argument("--window-size=1920,1080")
             except Exception as e:
                 logger.warning("添加 Linux 浏览器参数失败: {}", e)
 

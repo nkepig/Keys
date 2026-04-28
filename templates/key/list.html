@@ -300,6 +300,10 @@
               class="toolbar-btn btn-lift shrink-0 bg-white/72 backdrop-blur-sm ring-1 ring-black/5 hover:bg-white hover:ring-slate-300 text-slate-600 hover:text-slate-900 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-sm text-sm font-medium whitespace-nowrap">
         <i data-lucide="upload-cloud" class="w-4 h-4"></i> 批量上传
       </button>
+      <button @click="openUrlBatchModal"
+              class="toolbar-btn btn-lift shrink-0 bg-white/72 backdrop-blur-sm ring-1 ring-black/5 hover:bg-white hover:ring-slate-300 text-slate-600 hover:text-slate-900 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-sm text-sm font-medium whitespace-nowrap">
+        <i data-lucide="globe" class="w-4 h-4"></i> URL 批量校验
+      </button>
       <button @click="batchVerifyCurrentPage"
               :disabled="loading || paginatedDisplayRows.length===0 || batchRunning"
               class="toolbar-btn btn-lift shrink-0 bg-white/72 backdrop-blur-sm ring-1 ring-black/5 hover:bg-white hover:ring-slate-300 text-slate-600 hover:text-slate-900 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-sm text-sm font-medium whitespace-nowrap">
@@ -795,6 +799,171 @@
     </div>
   </transition>
 
+  <!-- ══ URL 批量校验 Modal ═══════════════════════════════ -->
+  <transition name="modal">
+    <div v-if="showUrlBatchModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div class="absolute inset-0 bg-slate-900/45 backdrop-blur-md" @click="closeUrlBatchModal"></div>
+      <div class="relative bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl w-full max-w-2xl border border-white/60 flex flex-col max-h-[92vh]">
+
+        <div class="px-6 py-5 border-b border-slate-100 flex justify-between items-center shrink-0">
+          <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+            <span class="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center">
+              <i data-lucide="globe" class="w-4 h-4 text-blue-600"></i>
+            </span>
+            URL 批量校验
+          </h2>
+          <button @click="closeUrlBatchModal" :disabled="urlBatchScanning"
+                  class="action-btn w-7 h-7 flex items-center justify-center text-slate-400 hover:bg-slate-100 rounded-lg disabled:opacity-40">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+
+        <!-- Phase 1: 输入 -->
+        <template v-if="urlBatchPhase==='input'">
+          <div class="p-6 space-y-4 overflow-y-auto no-scrollbar flex-1">
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                  URL 列表 <span class="text-slate-400 font-normal normal-case tracking-normal">（一行一个，自动抓取页面并提取密钥）</span>
+                </label>
+                <span class="text-xs text-slate-400">[[ urlBatchLineCount ]] 行</span>
+              </div>
+              <textarea v-model="urlBatchForm.urlsText" rows="10"
+                        placeholder="https://huggingface.co/&#10;https://github.com/user/repo&#10;https://pastebin.com/raw/abc123&#10;https://example.com/api-docs"
+                        class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-400 focus:bg-white outline-none resize-none text-sm font-mono"></textarea>
+            </div>
+            <div class="text-xs text-slate-400 flex items-center gap-1.5">
+              <i data-lucide="info" class="w-3.5 h-3.5 shrink-0"></i>
+              系统会抓取每个 URL 的页面内容，自动识别其中的 API 密钥并校验保存
+            </div>
+          </div>
+          <div class="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+            <button @click="closeUrlBatchModal" class="action-btn px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-xl font-medium">关闭</button>
+            <button @click="doUrlBatch" :disabled="!urlBatchForm.urlsText.trim()"
+                    class="btn-lift px-5 py-2 text-sm bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-semibold shadow-md shadow-slate-700/20 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none">
+              开始扫描
+            </button>
+          </div>
+        </template>
+
+        <!-- Phase 2: 扫描中 -->
+        <template v-if="urlBatchPhase==='scanning'">
+          <div class="flex-1 flex flex-col items-center justify-center p-10 gap-6">
+            <div class="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center">
+              <div class="w-8 h-8 border-[3px] border-slate-500 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+            <div class="text-center">
+              <p class="font-semibold text-slate-700 text-base">正在扫描 URL 并提取密钥…</p>
+              <p class="text-sm text-slate-400 mt-1">共 [[ urlBatchTotal ]] 个 URL，请耐心等待</p>
+            </div>
+            <div class="w-full max-w-xs">
+              <div class="flex justify-between text-xs text-slate-400 mb-1.5">
+                <span>进度</span>
+                <span>[[ Math.round(urlBatchProgress) ]]%</span>
+              </div>
+              <div class="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div class="h-full rounded-full transition-all duration-300 ease-out"
+                     style="background: linear-gradient(to right, #6b7ea8, #8b9bc8);"
+                     :style="{ width: urlBatchProgress + '%' }"></div>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- Phase 3: 结果 -->
+        <template v-if="urlBatchPhase==='done' && urlBatchResults">
+          <div class="flex-1 overflow-y-auto no-scrollbar">
+            <div class="p-6 pb-0">
+              <div class="grid grid-cols-4 gap-3 mb-5">
+                <div class="bg-blue-50/80 border border-blue-100 rounded-xl p-3 text-center">
+                  <p class="text-xl font-bold text-blue-600">[[ urlBatchResults.total || 0 ]]</p>
+                  <p class="text-xs text-blue-400 mt-0.5">扫描密钥</p>
+                </div>
+                <div class="bg-[#eef8f2] border border-[#d0e8da] rounded-xl p-3 text-center">
+                  <p class="text-xl font-bold text-[#4a8c6a]">[[ urlBatchResults.saved ]]</p>
+                  <p class="text-xs text-[#6aaa88] mt-0.5">成功保存</p>
+                </div>
+                <div class="bg-[#fdf2f2] border border-[#e8d0d0] rounded-xl p-3 text-center">
+                  <p class="text-xl font-bold text-[#a05050]">[[ urlBatchResults.failed ]]</p>
+                  <p class="text-xs text-[#b87070] mt-0.5">校验失败</p>
+                </div>
+                <div class="bg-slate-50 border border-slate-100 rounded-xl p-3 text-center">
+                  <p class="text-xl font-bold text-slate-700">[[ urlBatchScannedUrls ]]</p>
+                  <p class="text-xs text-slate-500 mt-0.5">扫描 URL</p>
+                </div>
+              </div>
+
+              <!-- 折叠：成功 -->
+              <div v-if="urlBatchSuccess.length" class="mb-3 rounded-xl border border-[#d0e8da] overflow-hidden">
+                <button @click="urlBatchSection.success=!urlBatchSection.success"
+                        class="w-full flex items-center justify-between px-4 py-3 bg-[#eef8f2] hover:bg-[#e0f2e8] transition text-left">
+                  <span class="flex items-center gap-2 text-sm font-semibold text-[#4a8c6a]">
+                    ✅ 成功保存
+                    <span class="bg-[#c8e8d4] text-[#3a7458] text-xs px-2 py-0.5 rounded-full">[[ urlBatchSuccess.length ]]</span>
+                  </span>
+                  <svg class="w-4 h-4 text-[#6aaa88] transition-transform duration-200" :class="urlBatchSection.success?'rotate-180':''"
+                       xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
+                </button>
+                <div :style="urlBatchSection.success ? 'max-height:200px' : 'max-height:0'"
+                     class="overflow-hidden transition-all duration-300 ease-in-out overflow-y-auto no-scrollbar divide-y divide-slate-50/50">
+                  <div v-for="r in urlBatchSuccess" :key="r.key"
+                       class="px-4 py-2.5 flex items-center gap-3 text-xs bg-white hover:bg-slate-50/50 transition">
+                    <code class="font-mono text-slate-500 flex-1 truncate">[[ r.key ]]</code>
+                    <span class="text-slate-400 shrink-0">[[ r.provider||'—' ]]</span>
+                    <span v-if="r.tier" class="text-slate-500 shrink-0">T[[ r.tier ]]</span>
+                    <span v-if="r.models_count" class="text-teal-500 shrink-0">[[ r.models_count ]]模</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 折叠：失败 -->
+              <div v-if="urlBatchFailed.length" class="mb-3 rounded-xl border border-[#e8d0d0] overflow-hidden">
+                <button @click="urlBatchSection.failed=!urlBatchSection.failed"
+                        class="w-full flex items-center justify-between px-4 py-3 bg-[#fdf2f2] hover:bg-[#f8e8e8] transition text-left">
+                  <span class="flex items-center gap-2 text-sm font-semibold text-[#a05050]">
+                    ❌ 校验失败
+                    <span class="bg-[#e8c8c8] text-[#885050] text-xs px-2 py-0.5 rounded-full">[[ urlBatchFailed.length ]]</span>
+                  </span>
+                  <svg class="w-4 h-4 text-[#c08080] transition-transform duration-200" :class="urlBatchSection.failed?'rotate-180':''"
+                       xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
+                </button>
+                <div :style="urlBatchSection.failed ? 'max-height:200px' : 'max-height:0'"
+                     class="overflow-hidden transition-all duration-300 ease-in-out overflow-y-auto no-scrollbar divide-y divide-slate-50/50">
+                  <div v-for="r in urlBatchFailed" :key="r.key"
+                       class="px-4 py-2.5 flex items-center gap-3 text-xs bg-white hover:bg-slate-50/30 transition">
+                    <code class="font-mono text-slate-400 flex-1 truncate">[[ r.key ]]</code>
+                    <span class="text-slate-400 shrink-0">[[ r.provider||'未识别' ]]</span>
+                    <span class="text-[#b07070] shrink-0">[[ r.error||'失败' ]]</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 无结果 -->
+              <div v-if="urlBatchSuccess.length===0 && urlBatchFailed.length===0" class="py-16 text-center">
+                <div class="flex flex-col items-center gap-3 text-slate-400">
+                  <div class="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center">
+                    <i data-lucide="search-x" class="w-8 h-8 opacity-40"></i>
+                  </div>
+                  <p class="text-sm font-medium">未找到任何 API 密钥</p>
+                  <p class="text-xs text-slate-300">提供的 URL 页面中未包含可识别的密钥</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+            <button @click="resetUrlBatch" class="action-btn px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-xl font-medium">继续扫描</button>
+            <button @click="closeUrlBatchModalAndRefresh" class="btn-lift px-5 py-2 text-sm bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-semibold">完成</button>
+          </div>
+        </template>
+
+      </div>
+    </div>
+  </transition>
+
   <!-- ══ 模型列表 Modal ══════════════════════════════════ -->
   <transition name="modal">
     <div v-if="modelsModal.show" class="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -1011,6 +1180,17 @@ createApp({
     const uploadFiltered  = ref([]);
     const uploadingTotal  = ref(0);
     const showSection     = reactive({ success: true, failed: true, filtered: false });
+
+    // Modal：URL 批量校验
+    const showUrlBatchModal  = ref(false);
+    const urlBatchForm       = reactive({ urlsText: '' });
+    const urlBatchScanning   = ref(false);
+    const urlBatchPhase      = ref('input');
+    const urlBatchProgress   = ref(0);
+    const urlBatchResults    = ref(null);
+    const urlBatchTotal      = ref(0);
+    const urlBatchScannedUrls = ref(0);
+    const urlBatchSection    = reactive({ success: true, failed: true });
 
     // Modal：模型列表
     const modelsModal = reactive({ show: false, list: [], provider: '' });
@@ -1483,6 +1663,75 @@ createApp({
       }
     };
 
+    // ── URL 批量校验 ─────────────────────────────────────────
+    const urlBatchLineCount = computed(() =>
+      urlBatchForm.urlsText.split('\n').filter(l => l.trim()).length
+    );
+    const urlBatchSuccess = computed(() => (urlBatchResults.value?.results || []).filter(r => r.saved));
+    const urlBatchFailed  = computed(() => (urlBatchResults.value?.results || []).filter(r => !r.saved));
+
+    const openUrlBatchModal = () => {
+      urlBatchPhase.value = 'input'; urlBatchResults.value = null; urlBatchForm.urlsText = '';
+      urlBatchScannedUrls.value = 0;
+      showUrlBatchModal.value = true;
+      nextTick(() => lucide.createIcons());
+    };
+    const closeUrlBatchModal = () => {
+      if (urlBatchScanning.value) return;
+      showUrlBatchModal.value = false;
+    };
+    const closeUrlBatchModalAndRefresh = () => {
+      showUrlBatchModal.value = false;
+      fetchKeys();
+    };
+    const resetUrlBatch = () => {
+      urlBatchForm.urlsText = '';
+      urlBatchPhase.value = 'input'; urlBatchResults.value = null;
+      urlBatchScannedUrls.value = 0;
+      nextTick(() => lucide.createIcons());
+    };
+    const doUrlBatch = async () => {
+      if (urlBatchScanning.value) return;
+      const lines = urlBatchForm.urlsText.split('\n').map(l => l.trim()).filter(Boolean);
+      if (!lines.length) { showToast('请输入至少一个 URL', 'error'); return; }
+
+      urlBatchScanning.value = true;
+      urlBatchPhase.value = 'scanning';
+      urlBatchProgress.value = 0;
+      urlBatchTotal.value = lines.length;
+      urlBatchScannedUrls.value = lines.length;
+
+      const estimated = lines.length * 2500;
+      const startTime = Date.now();
+      const timer = setInterval(() => {
+        urlBatchProgress.value = Math.min(92, ((Date.now() - startTime) / estimated) * 100);
+      }, 120);
+
+      try {
+        const res = await apiFetch('/api/keys/batch_urls', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ urls_text: urlBatchForm.urlsText }),
+        });
+        clearInterval(timer);
+        urlBatchProgress.value = 100;
+        await new Promise(r => setTimeout(r, 400));
+        if (res) {
+          urlBatchResults.value = await res.json();
+          urlBatchPhase.value = 'done';
+          urlBatchSection.success = true; urlBatchSection.failed = true;
+          await fetchKeys();
+        } else {
+          urlBatchPhase.value = 'input';
+        }
+      } catch {
+        clearInterval(timer);
+        urlBatchPhase.value = 'input';
+      } finally {
+        urlBatchScanning.value = false;
+      }
+    };
+
     onMounted(() => { fetchKeys(); lucide.createIcons(); });
 
     return {
@@ -1502,6 +1751,10 @@ createApp({
       fetchKeys, doRefresh, fetchKeyRow, updateRow, openModal, saveKey, deleteKey, verifyKey, doLogout,
       openUploadModal, closeUploadModal, resetUpload, doUpload, batchRunning, batchVerifyCurrentPage,
       copyCurrentPageKeys,
+      showUrlBatchModal, urlBatchForm, urlBatchScanning, urlBatchPhase, urlBatchProgress,
+      urlBatchResults, urlBatchTotal, urlBatchScannedUrls, urlBatchSection,
+      urlBatchLineCount, urlBatchSuccess, urlBatchFailed,
+      openUrlBatchModal, closeUrlBatchModal, closeUrlBatchModalAndRefresh, resetUrlBatch, doUrlBatch,
     };
   },
 }).mount('#app');
