@@ -53,7 +53,7 @@ VERIFY_CONCURRENT = 40
 BASE_URL = "https://pastebin.com"
 SEARCH_URL = f"{BASE_URL}/search"
 DEFAULT_QUERIES = ["sk-", "openai", "api_key", "AIzaSy", "gemini"]
-BROWSER_PATH = "/usr/bin/google-chrome"
+BROWSER_PATH = None
 
 
 def pick_account(accounts: list[str]) -> Optional[str]:
