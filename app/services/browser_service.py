@@ -56,8 +56,14 @@ Object.defineProperty(MouseEvent.prototype, 'screenY', { value: screenY });"""
         headless: bool = False,
         enable_turnstile_bypass: bool = True,
         browser_path: str = None,
+        local_port: Optional[int] = None,
     ) -> None:
         self.co = ChromiumOptions()
+        if local_port is not None:
+            self.co.set_local_port(local_port)
+        else:
+            # 未指定端口时由 DrissionPage 在区间内自动占用空闲端口，关闭后清理临时用户目录
+            self.co.auto_port()
         if incognito:
             self.co.incognito()
         if headless:
