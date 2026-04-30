@@ -53,6 +53,7 @@ VERIFY_CONCURRENT = 40
 BASE_URL = "https://pastebin.com"
 SEARCH_URL = f"{BASE_URL}/search"
 DEFAULT_QUERIES = ["sk-", "openai", "api_key", "AIzaSy", "gemini"]
+BROWSER_PATH = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
 
 def pick_account(accounts: list[str]) -> Optional[str]:
@@ -438,6 +439,7 @@ async def main() -> None:
             scan_concurrent=SCAN_CONCURRENT,
             verify_concurrent=VERIFY_CONCURRENT,
             verify=VERIFY,
+            browser_path=BROWSER_PATH,
         )
         if not scan_results:
             logger.warning("未发现任何密钥或未收集到链接")
