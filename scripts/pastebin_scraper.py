@@ -47,7 +47,7 @@ PASTEBIN_ACCOUNTS = [
 QUERIES = ["sk-", "openai", "api_key", "AIzaSy", "gemini", "sk-ant-api03-"]
 
 VERIFY = True
-SCAN_CONCURRENT = 2
+SCAN_CONCURRENT = 1
 VERIFY_CONCURRENT = 40
 
 BASE_URL = "https://pastebin.com"
