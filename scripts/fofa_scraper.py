@@ -36,8 +36,8 @@ async def main():
 
     try:
         date = (datetime.now() - timedelta(days=random.randint(1, 730))).strftime("%Y-%m-%d")
-        q_oai = f'(body="gemini") || (body="api" || body="key") after="{date}"'
-        q_ggl = f'(body="AIzaSy{random.choice("ABCD")}") after="{date}"'
+        q_oai = f'((body="gemini") || (body="api" || body="key")) && after="{date}"'
+        q_ggl = f'(body="AIzaSy{random.choice("ABCD")}") && after="{date}"'
         logger.info(f"FOFA 查询[OpenAI]: {q_oai}")
         logger.info(f"FOFA 查询[Google]: {q_ggl}")
 
