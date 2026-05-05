@@ -3,6 +3,7 @@ import os
 import time
 from pathlib import Path
 
+from aiohttp import ClientResponseError
 from app.http_client import get_http_session
 from loguru import logger
 
@@ -73,9 +74,19 @@ class NewAPIService:
                     resp.raise_for_status()
                     body = await resp.json()
                     return body.get("data", body) if unwrap_data else body
+            except ClientResponseError as e:
+                # 仅在鉴权失效场景刷新 header；限流/其他错误不做二次登录重试
+                if e.status in (401, 403) and not refresh:
+                    logger.warning("newapi 鉴权可能失效，刷新 header 后重试: {} {}", method, path)
+                    continue
+                if e.status == 429:
+                    logger.warning("newapi 登录/请求被限流(429)，不触发 header 刷新重试: {} {}", method, path)
+                raise
             except Exception:
-                if refresh:
-                    raise
+                if not refresh:
+                    logger.warning("newapi 请求异常，刷新 header 后重试: {} {}", method, path)
+                    continue
+                raise
 
         raise RuntimeError("请求失败")
 

@@ -30,14 +30,16 @@ COOLDOWN_SEC = 300
 
 async def main() -> None:
     await init_http_client()
-    raw = await NewAPIService(base_url, username, password).get_user_logs(page=1, page_size=LIMIT)
-    rows = raw["items"] if isinstance(raw, dict) and isinstance(raw.get("items"), list) else raw
-    rows = rows[:LIMIT] if isinstance(rows, list) else []
-    n = len(rows)
-    ok = sum(1 for r in rows if isinstance(r, dict) and r.get("type") == 2)
-    rate = ok / n if n else 1.0
-    logger.info("最近{}条 type==2 占比 {:.0%} ({}/{})", n, rate, ok, n)
-    await close_http_client()
+    try:
+        raw = await NewAPIService(base_url, username, password).get_user_logs(page=1, page_size=LIMIT)
+        rows = raw["items"] if isinstance(raw, dict) and isinstance(raw.get("items"), list) else raw
+        rows = rows[:LIMIT] if isinstance(rows, list) else []
+        n = len(rows)
+        ok = sum(1 for r in rows if isinstance(r, dict) and r.get("type") == 2)
+        rate = ok / n if n else 1.0
+        logger.info("最近{}条 type==2 占比 {:.0%} ({}/{})", n, rate, ok, n)
+    finally:
+        await close_http_client()
 
     if not n or rate >= THRESHOLD:
         raise SystemExit(0)
