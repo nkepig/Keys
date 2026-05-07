@@ -64,13 +64,13 @@ class NewAPIService:
             cache_file.write_text(json.dumps({"saved_at": time.time(), "headers": self._hdrs}, ensure_ascii=False), encoding="utf-8")
         return self._hdrs
 
-    async def _request(self, method: str, path: str, *, headers: dict | None = None, params: dict | None = None, unwrap_data: bool = True) -> dict:
+    async def _request(self, method: str, path: str, *, headers: dict | None = None, params: dict | None = None, json: dict | None = None, unwrap_data: bool = True) -> dict:
         session = get_http_session()
         extra_headers = headers or {}
         for refresh in (False, True):
             try:
                 merged_headers = {**(await self._header(refresh=refresh)), **extra_headers}
-                async with session.request(method, f"{self.base_url}{path}", headers=merged_headers, params=params) as resp:
+                async with session.request(method, f"{self.base_url}{path}", headers=merged_headers, params=params, json=json) as resp:
                     resp.raise_for_status()
                     body = await resp.json()
                     return body.get("data", body) if unwrap_data else body
@@ -98,13 +98,48 @@ class NewAPIService:
             unwrap_data=False,
         )
 
-    async def get_user_logs(self, page: int = 1, page_size: int = 20) -> dict:
+    async def get_logs(
+        self,
+        page: int = 1,
+        page_size: int = 50,
+        *,
+        log_type: int = 0,
+        channel_id: int | None = None,
+        username: str = "",
+        user_id: str = "",
+        token_name: str = "",
+        model_name: str = "",
+        start_timestamp: int | None = None,
+        end_timestamp: int | None = None,
+        group: str = "",
+        request_id: str = "",
+    ) -> dict:
+        params: dict = {
+            "p": page,
+            "page_size": page_size,
+            "type": log_type,
+            "username": username,
+            "user_id": user_id,
+            "token_name": token_name,
+            "model_name": model_name,
+            "channel": channel_id if channel_id is not None else "",
+            "group": group,
+            "request_id": request_id,
+        }
+        if start_timestamp is not None:
+            params["start_timestamp"] = start_timestamp
+        if end_timestamp is not None:
+            params["end_timestamp"] = end_timestamp
         return await self._request(
             "GET",
             "/api/log/",
             headers={"accept": "application/json, text/plain, */*", "cache-control": "no-store"},
-            params={"p": page, "page_size": page_size, "type": 0},
+            params=params,
         )
+
+    async def get_user_logs(self, page: int = 1, page_size: int = 20) -> dict:
+        """兼容旧调用，建议改用 get_logs()。"""
+        return await self.get_logs(page=page, page_size=page_size)
 
     async def get_users(self, page: int = 1, page_size: int = 100) -> dict:
         return await self._request(
@@ -112,4 +147,22 @@ class NewAPIService:
             "/api/user/",
             headers={"accept": "application/json, text/plain, */*", "cache-control": "no-store"},
             params={"p": page, "page_size": page_size},
+        )
+
+    async def get_channels(self, page: int = 1, page_size: int = 100) -> dict:
+        return await self._request(
+            "GET",
+            "/api/channel/",
+            headers={"accept": "application/json, text/plain, */*", "cache-control": "no-store"},
+            params={"p": page, "page_size": page_size},
+        )
+
+    async def disable_channel(self, channel_id: int) -> dict:
+        """将渠道状态置为禁用（status=2）。"""
+        return await self._request(
+            "PUT",
+            "/api/channel/",
+            headers={"accept": "application/json, text/plain, */*"},
+            json={"id": channel_id, "status": 2},
+            unwrap_data=False,
         )
