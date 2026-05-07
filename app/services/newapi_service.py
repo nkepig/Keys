@@ -149,6 +149,13 @@ class NewAPIService:
             params={"p": page, "page_size": page_size},
         )
 
+    async def get_channel(self, channel_id: int) -> dict:
+        return await self._request(
+            "GET",
+            f"/api/channel/{channel_id}",
+            headers={"accept": "application/json, text/plain, */*", "cache-control": "no-store"},
+        )
+
     async def get_channels(self, page: int = 1, page_size: int = 100) -> dict:
         return await self._request(
             "GET",

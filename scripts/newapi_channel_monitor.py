@@ -50,21 +50,33 @@ async def main() -> None:
 
         for cid in CHANNEL_IDS:
             try:
+                ch = await svc.get_channel(cid)
+            except Exception as exc:
+                logger.warning("渠道 {} 获取信息失败：{}", cid, exc)
+                continue
+
+            name: str = ch.get("name", str(cid)) if isinstance(ch, dict) else str(cid)
+            status: int = ch.get("status", 0) if isinstance(ch, dict) else 0
+            if status != 1:
+                logger.info("渠道 {}({}) 当前非启用状态（status={}），跳过", cid, name, status)
+                continue
+
+            try:
                 rate, ok, n = await calc_success_rate(svc, cid)
             except Exception as exc:
-                logger.warning("渠道 {} 获取日志失败：{}", cid, exc)
+                logger.warning("渠道 {}({}) 获取日志失败：{}", cid, name, exc)
                 continue
 
             label = "  ← 低于阈值" if rate < THRESHOLD else ""
-            logger.info("渠道 {} 成功率 {:.0%}  ({}/{}){}", cid, rate, ok, n, label)
+            logger.info("渠道 {}({}) 成功率 {:.0%}  ({}/{}){}", cid, name, rate, ok, n, label)
 
             if rate < THRESHOLD:
                 try:
                     await svc.disable_channel(cid)
-                    logger.warning("已禁用渠道 {}，成功率 {:.0%}", cid, rate)
+                    logger.warning("已禁用渠道 {}({})，成功率 {:.0%}", cid, name, rate)
                     disabled.append(cid)
                 except Exception as exc:
-                    logger.error("禁用渠道 {} 失败：{}", cid, exc)
+                    logger.error("禁用渠道 {}({}) 失败：{}", cid, name, exc)
 
     finally:
         await close_http_client()
