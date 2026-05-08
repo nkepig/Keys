@@ -400,11 +400,22 @@ async def run_pastebin_scrape(
 
         if verify and scan_results:
             logger.info("开始批量校验 {} 个密钥…", len(scan_results))
+            logger.info(
+                "Pastebin 校验阶段：将扫描得到的 {} 条密钥记录送入校验入库流程，并发数: {}",
+                len(scan_results),
+                verify_concurrent,
+            )
             results = await key_service.batch_process_keys(
                 [{"key": item["key"], "origin": item["url"]} for item in scan_results],
                 concurrent=verify_concurrent,
             )
             saved = sum(1 for r in results if r["saved"])
+            logger.info(
+                "Pastebin 校验阶段完成：总计 {} | 成功 {} | 失败 {}",
+                len(results),
+                saved,
+                len(results) - saved,
+            )
             logger.success(
                 "\n{}\n密钥入库统计: 总计 {} | 成功 {} | 失败 {}\n{}",
                 "=" * 55,
@@ -429,7 +440,7 @@ async def run_pastebin_scrape(
 
 async def main() -> None:
     logger.remove()
-    logger.add(sys.stderr, level="ERROR")
+    logger.add(sys.stderr, level="INFO")
 
     try:
         scan_results = await run_pastebin_scrape(
