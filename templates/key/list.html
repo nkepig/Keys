@@ -77,6 +77,30 @@
     .collapse-enter-from, .collapse-leave-to { max-height: 0; opacity: 0; }
     .collapse-enter-to, .collapse-leave-from { max-height: 500px; opacity: 1; }
 
+    .toolbar-menu-enter-active, .toolbar-menu-leave-active {
+      transition: opacity .14s ease-out, transform .16s cubic-bezier(0.2, 0.8, 0.2, 1);
+      transform-origin: top right;
+    }
+    .toolbar-menu-enter-from, .toolbar-menu-leave-to {
+      opacity: 0;
+      transform: translateY(-4px) scale(0.985);
+    }
+    .toolbar-menu-enter-to, .toolbar-menu-leave-from {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+
+    .menu-chevron {
+      transition: transform .16s cubic-bezier(0.2, 0.8, 0.2, 1), color .14s ease, background-color .14s ease;
+    }
+
+    .menu-chevron-active {
+      color: #0f172a;
+      background: rgba(255,255,255,.65);
+      transform: rotate(180deg);
+      box-shadow: inset 0 0 0 1px rgba(148,163,184,.16);
+    }
+
     /* ── 表格固定布局（防抖动核心）─────────────── */
     .key-table {
       table-layout: fixed;
@@ -275,10 +299,14 @@
                 class="toolbar-btn btn-lift shrink-0 bg-white/72 backdrop-blur-sm ring-1 ring-black/5 hover:bg-white hover:ring-slate-300 text-slate-600 hover:text-slate-900 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-sm text-sm font-medium whitespace-nowrap">
           <i data-lucide="layers-3" class="w-4 h-4"></i>
           批量上传
-          <i data-lucide="chevron-down" class="w-4 h-4 transition-transform duration-200" :class="activeActionMenu === 'upload' ? 'rotate-180' : ''"></i>
+          <span class="menu-chevron inline-flex h-5 w-5 items-center justify-center rounded-md"
+                :class="activeActionMenu === 'upload' ? 'menu-chevron-active' : ''">
+            <i data-lucide="chevron-down" class="w-4 h-4"></i>
+          </span>
         </button>
-        <div v-if="activeActionMenu === 'upload'"
-             class="absolute right-0 top-[calc(100%+10px)] z-40 w-[280px] rounded-2xl border border-white/70 bg-white/95 p-2 shadow-2xl shadow-slate-200/50 backdrop-blur-xl">
+        <transition name="toolbar-menu">
+          <div v-if="activeActionMenu === 'upload'"
+               class="absolute right-0 top-[calc(100%+10px)] z-40 w-[280px] rounded-2xl border border-white/70 bg-white/95 p-2 shadow-2xl shadow-slate-200/50 backdrop-blur-xl">
           <div class="space-y-1">
             <button @click="runBatchAction(openUploadModal)"
                     class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-600 transition hover:bg-slate-50 hover:text-slate-900">
@@ -291,17 +319,22 @@
               <span>校验 URL</span>
             </button>
           </div>
-        </div>
+          </div>
+        </transition>
       </div>
       <div class="relative shrink-0" data-action-menu="page">
         <button @click="toggleActionMenu('page')"
                 class="toolbar-btn btn-lift shrink-0 bg-white/72 backdrop-blur-sm ring-1 ring-black/5 hover:bg-white hover:ring-slate-300 text-slate-600 hover:text-slate-900 px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-sm text-sm font-medium whitespace-nowrap">
           <i data-lucide="list-checks" class="w-4 h-4"></i>
           当前页操作
-          <i data-lucide="chevron-down" class="w-4 h-4 transition-transform duration-200" :class="activeActionMenu === 'page' ? 'rotate-180' : ''"></i>
+          <span class="menu-chevron inline-flex h-5 w-5 items-center justify-center rounded-md"
+                :class="activeActionMenu === 'page' ? 'menu-chevron-active' : ''">
+            <i data-lucide="chevron-down" class="w-4 h-4"></i>
+          </span>
         </button>
-        <div v-if="activeActionMenu === 'page'"
-             class="absolute right-0 top-[calc(100%+10px)] z-40 w-[280px] rounded-2xl border border-white/70 bg-white/95 p-2 shadow-2xl shadow-slate-200/50 backdrop-blur-xl">
+        <transition name="toolbar-menu">
+          <div v-if="activeActionMenu === 'page'"
+               class="absolute right-0 top-[calc(100%+10px)] z-40 w-[280px] rounded-2xl border border-white/70 bg-white/95 p-2 shadow-2xl shadow-slate-200/50 backdrop-blur-xl">
           <div class="px-2 py-2">
             <label class="sr-only" for="batch-verify-model">批量校验模型</label>
             <input id="batch-verify-model"
@@ -324,7 +357,8 @@
               <span>复制本页</span>
             </button>
           </div>
-        </div>
+          </div>
+        </transition>
       </div>
       <button @click="openModal(false)"
               class="btn-lift shrink-0 bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-md shadow-slate-700/25 text-sm font-medium whitespace-nowrap">

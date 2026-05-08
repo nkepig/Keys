@@ -24,7 +24,7 @@ base_url = "http://67.21.92.138:3011"
 username = "root"
 password = "root666."
 LIMIT = 50
-THRESHOLD = 0.7
+THRESHOLD = 0.6
 COOLDOWN_SEC = 300
 
 
