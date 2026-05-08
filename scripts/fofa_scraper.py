@@ -36,8 +36,8 @@ async def main():
 
     try:
         date = (datetime.now() - timedelta(days=random.randint(1, 730))).strftime("%Y-%m-%d")
-        q_oai = f'((body="GEMINI_API_KEY") || (body="GOOGLE_MAPS_API_KEY")) && after="{date}"'
-        q_ggl = f'(body="https://maps.googleapis.com/maps/api/js?key=") && after="{date}"'
+        q_oai = f'((body="API_KEY") && (body="GEMINI")) && after="{date}"'
+        q_ggl = f'(body="AIzaSy") && after="{date}"'
         logger.info(f"FOFA 查询[OpenAI]: {q_oai}")
         logger.info(f"FOFA 查询[Google]: {q_ggl}")
 
