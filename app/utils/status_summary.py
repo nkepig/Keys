@@ -25,5 +25,8 @@ def format_status_code_counts(counts: Mapping[object, int] | Counter) -> str:
 def count_status_codes(items: Iterable[Mapping[str, object]], field: str = "status_code") -> Counter:
     counter: Counter[object] = Counter()
     for item in items:
-        counter[item.get(field)] += 1
+        code = item.get(field)
+        if code is None:
+            code = item.get("status_detail") or None
+        counter[code] += 1
     return counter

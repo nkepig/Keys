@@ -9,6 +9,8 @@ import asyncio
 import json
 import re
 
+import aiohttp
+
 from sqlmodel import Session, select
 
 from app.db import engine
@@ -186,15 +188,49 @@ _MODEL_FETCHERS = {
 }
 
 
+def _classify_verify_exception(e: Exception) -> str:
+    if isinstance(e, asyncio.TimeoutError):
+        return "timeout"
+    if isinstance(e, aiohttp.ClientConnectorCertificateError):
+        return "ssl_certificate_error"
+    if isinstance(e, aiohttp.ClientSSLError):
+        return "ssl_error"
+    if isinstance(e, aiohttp.ClientConnectorDNSError):
+        return "dns_error"
+    if isinstance(e, aiohttp.ClientProxyConnectionError):
+        return "proxy_connection_error"
+    if isinstance(e, aiohttp.ClientConnectionResetError):
+        return "connection_reset"
+    if isinstance(e, aiohttp.ServerDisconnectedError):
+        return "server_disconnected"
+    if isinstance(e, aiohttp.ClientConnectorError):
+        return "connection_error"
+    if isinstance(e, aiohttp.ClientPayloadError):
+        return "payload_error"
+    if isinstance(e, aiohttp.InvalidURL):
+        return "invalid_url"
+    if isinstance(e, aiohttp.ClientError):
+        return "client_error"
+    return e.__class__.__name__
+
+
 async def verify_key(provider: str, key: str, model: str | None = None) -> dict:
     """调用对应供应商的校验服务，返回 {status_code, tier}。"""
     service = _VERIFY_SERVICES.get(provider)
     if service is None:
-        return {"status_code": None, "tier": None}
+        return {
+            "status_code": None,
+            "tier": None,
+            "status_detail": "unsupported_provider",
+        }
     try:
         return await service.verify(key, model=model)
-    except Exception:
-        return {"status_code": None, "tier": None}
+    except Exception as e:
+        return {
+            "status_code": None,
+            "tier": None,
+            "status_detail": _classify_verify_exception(e),
+        }
 
 
 async def fetch_models_for(provider: str, key: str) -> list[str]:
@@ -221,6 +257,7 @@ async def process_key(raw_key: str, origin: str | None = None) -> dict:
         return {
             "id": None, "key": None, "provider": None,
             "status_code": None, "tier": None, "models_count": 0,
+            "status_detail": "unrecognized_provider_or_key",
             "saved": False, "error": "无法识别供应商或 key",
         }
 
@@ -241,6 +278,7 @@ async def process_key(raw_key: str, origin: str | None = None) -> dict:
         "id": saved.id, "key": _mask_key(clean_key), "provider": provider,
         "status_code": status_code, "tier": tier_val,
         "models_count": len(json.loads(models_json)) if models_json else 0,
+        "status_detail": result.get("status_detail"),
         "saved": True, "error": None,
     }
 
@@ -284,6 +322,7 @@ async def batch_process_keys(
             skip_results.append({
                 "id": None, "key": _mask_key(clean_key), "provider": None,
                 "status_code": None, "tier": None, "models_count": 0,
+                "status_detail": "skipped_existing",
                 "saved": False, "error": "已存在，跳过",
             })
         else:
