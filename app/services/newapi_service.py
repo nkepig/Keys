@@ -137,10 +137,6 @@ class NewAPIService:
             params=params,
         )
 
-    async def get_user_logs(self, page: int = 1, page_size: int = 20) -> dict:
-        """兼容旧调用，建议改用 get_logs()。"""
-        return await self.get_logs(page=page, page_size=page_size)
-
     async def get_users(self, page: int = 1, page_size: int = 100) -> dict:
         return await self._request(
             "GET",

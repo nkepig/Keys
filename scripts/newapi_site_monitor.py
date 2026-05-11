@@ -31,7 +31,7 @@ COOLDOWN_SEC = 300
 async def main() -> None:
     await init_http_client()
     try:
-        raw = await NewAPIService(base_url, username, password).get_user_logs(page=1, page_size=LIMIT)
+        raw = await NewAPIService(base_url, username, password).get_logs(username="viet")
         rows = raw["items"] if isinstance(raw, dict) and isinstance(raw.get("items"), list) else raw
         rows = rows[:LIMIT] if isinstance(rows, list) else []
         n = len(rows)
