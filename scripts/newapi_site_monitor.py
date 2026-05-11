@@ -57,7 +57,7 @@ async def main() -> None:
     msg["To"] = ", ".join(settings.email_recipients)
     msg.set_content(
         f"站点监控：{base_url}\n\n"
-        f"最近二十条成功率：{rate:.0%}\n"
+        f"最近五十条成功率：{rate:.0%}\n"
         f"阈值：{THRESHOLD:.0%}\n"
         f"成功率低于阈值，请及时处理。",
         charset="utf-8",
