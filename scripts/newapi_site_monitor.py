@@ -72,8 +72,6 @@ async def main() -> None:
     await asyncio.to_thread(send)
     STATE_PATH.write_text(json.dumps({"last_alert_ts": now}))
     logger.info("告警邮件已发送")
-    raise SystemExit(1)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
