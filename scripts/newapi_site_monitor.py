@@ -25,7 +25,7 @@ username = "root"
 password = "root666."
 LIMIT = 50
 THRESHOLD = 0.6
-COOLDOWN_SEC = 300
+COOLDOWN_SEC = 600
 
 
 async def main() -> None:
