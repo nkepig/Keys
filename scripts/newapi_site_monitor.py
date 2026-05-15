@@ -29,7 +29,7 @@ BASE_URL = "http://67.21.92.138:3011"
 username = "root"
 password = "root666."
 LIMIT = 50
-THRESHOLD = 2
+THRESHOLD = 0.4
 COOLDOWN_SEC = 600
 BARK_KEY = "w92Rkx7wTKHGuy9SU5Qtga"
 BARK_BJ_END_HOUR = 9  # 北京时间 hour < 此值时发 Bark（即 00:00–08:59 段，到 9 点前）
@@ -99,7 +99,7 @@ async def main() -> None:
                 s.send_message(msg)
 
         try:
-            # await asyncio.to_thread(send)
+            await asyncio.to_thread(send)
             logger.info("告警邮件已发送")
         except Exception:
             logger.exception("邮件发送失败（Bark 仅北京 0–{} 点）", BARK_BJ_END_HOUR)
