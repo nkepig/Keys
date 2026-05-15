@@ -29,22 +29,23 @@ BASE_URL = "http://67.21.92.138:3011"
 username = "root"
 password = "root666."
 LIMIT = 50
-THRESHOLD = 0.4
+THRESHOLD = 2
 COOLDOWN_SEC = 600
 BARK_KEY = "w92Rkx7wTKHGuy9SU5Qtga"
 BARK_BJ_END_HOUR = 9  # 北京时间 hour < 此值时发 Bark（即 00:00–08:59 段，到 9 点前）
 ALERT_SUBJECT = f"[告警] New API {BASE_URL}"
 ALERT_BODY_FMT = "站点监控：{base_url}\n\n最近 {limit} 条成功率：{rate:.0%}\n阈值：{threshold:.0%}\n成功率低于阈值，请及时处理。"
 BARK_URL_TMPL = f"https://bark.dazes.cc/{BARK_KEY}/{{enc_subj}}/{{enc_body}}?level=critical&sound=alarm&volume=10"
+BARK_BURST_SLEEP_SEC = 3.0  # 单次 Bark 铃声约 3s，间隔过短会叠在一起
 
 
 async def bark_burst_10s(url: str) -> None:
-    """约 10 秒内重复请求 Bark（无冷却，由调用方在失败时调用）。"""
-    logger.warning("成功率低于阈值，Bark 约 10 秒")
+    """约 15 秒内重复请求 Bark（无冷却，由调用方在失败时调用）。"""
+    logger.warning("成功率低于阈值，Bark 约 15 秒")
     await init_http_client()
     try:
         session = get_http_session()
-        until = time.monotonic() + 10.0
+        until = time.monotonic() + 15.0
         while time.monotonic() < until:
             try:
                 async with session.get(url) as resp:
@@ -54,7 +55,7 @@ async def bark_burst_10s(url: str) -> None:
             remaining = until - time.monotonic()
             if remaining <= 0:
                 break
-            await asyncio.sleep(min(1.0, remaining))
+            await asyncio.sleep(min(BARK_BURST_SLEEP_SEC, remaining))
     finally:
         await close_http_client()
     logger.info("Bark 已发送")
