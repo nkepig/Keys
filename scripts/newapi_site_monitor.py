@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """最近若干条日志里 type==2 的占比；成功率 < THRESHOLD 时告警。
 
-邮件有冷却；Bark 无冷却，且仅在北京时间 00:00–09:00（不含 9 点整）推送。
+邮件与 fwalert 共用冷却；fwalert 仅在北京时间 00:00–09:00（不含 9 点整）触发。
 """
 from __future__ import annotations
 
@@ -12,7 +12,6 @@ import sys
 import time
 from email.message import EmailMessage
 from pathlib import Path
-from urllib.parse import quote
 
 from loguru import logger
 
@@ -31,34 +30,25 @@ password = "root666."
 LIMIT = 50
 THRESHOLD = 0.3
 COOLDOWN_SEC = 600
-BARK_KEY = "w92Rkx7wTKHGuy9SU5Qtga"
-BARK_BJ_END_HOUR = 9  # 北京时间 hour < 此值时发 Bark（即 00:00–08:59 段，到 9 点前）
+FWALERT_URL = "https://fwalert.com/0fe4f0f5-a969-4599-8e72-78582942bc08"
+FWALERT_BJ_END_HOUR = 9  # 北京时间 hour < 此值时请求 fwalert（00:00–08:59）
 ALERT_SUBJECT = f"[告警] New API {BASE_URL}"
 ALERT_BODY_FMT = "站点监控：{base_url}\n\n最近 {limit} 条成功率：{rate:.0%}\n阈值：{threshold:.0%}\n成功率低于阈值，请及时处理。"
-BARK_URL_TMPL = f"https://bark.dazes.cc/{BARK_KEY}/{{enc_subj}}/{{enc_body}}?level=critical&sound=alarm&volume=10"
-BARK_BURST_SLEEP_SEC = 3.0  # 单次 Bark 铃声约 3s，间隔过短会叠在一起
 
 
-async def bark_burst_10s(url: str) -> None:
-    """约 15 秒内重复请求 Bark（无冷却，由调用方在失败时调用）。"""
-    logger.warning("成功率低于阈值，Bark 约 15 秒")
+async def trigger_fwalert() -> None:
+    """GET fwalert（与邮件同冷却，由调用方保证）。"""
     await init_http_client()
     try:
         session = get_http_session()
-        until = time.monotonic() + 15.0
-        while time.monotonic() < until:
-            try:
-                async with session.get(url) as resp:
-                    logger.info("Bark HTTP {}", resp.status)
-            except Exception:
-                logger.exception("Bark 请求失败")
-            remaining = until - time.monotonic()
-            if remaining <= 0:
-                break
-            await asyncio.sleep(min(BARK_BURST_SLEEP_SEC, remaining))
+        async with session.get(FWALERT_URL) as resp:
+            logger.info("fwalert HTTP {}", resp.status)
+            if resp.status >= 400:
+                logger.warning("fwalert 非成功状态 {}", resp.status)
+    except Exception:
+        logger.exception("fwalert 请求失败")
     finally:
         await close_http_client()
-    logger.info("Bark 已发送")
 
 
 async def main() -> None:
@@ -82,7 +72,6 @@ async def main() -> None:
     last = json.loads(STATE_PATH.read_text()).get("last_alert_ts", 0) if STATE_PATH.exists() else 0
 
     body = ALERT_BODY_FMT.format(base_url=BASE_URL, limit=LIMIT, rate=rate, threshold=THRESHOLD)
-    bark_url = BARK_URL_TMPL.format(enc_subj=quote(ALERT_SUBJECT, safe=""), enc_body=quote(body, safe=""))
 
     if now - last >= COOLDOWN_SEC:
         msg = EmailMessage()
@@ -103,15 +92,15 @@ async def main() -> None:
             await asyncio.to_thread(send)
             logger.info("告警邮件已发送")
         except Exception:
-            logger.exception("邮件发送失败（Bark 仅北京 0–{} 点）", BARK_BJ_END_HOUR)
+            logger.exception("邮件发送失败（fwalert 仅北京 0–{} 点）", FWALERT_BJ_END_HOUR)
         STATE_PATH.write_text(json.dumps({"last_alert_ts": now}))
-    else:
-        logger.warning("冷却 {:.0f}s 内跳过邮件", COOLDOWN_SEC - (now - last))
 
-    if china_now().hour < BARK_BJ_END_HOUR:
-        await bark_burst_10s(bark_url)
+        if china_now().hour < FWALERT_BJ_END_HOUR:
+            await trigger_fwalert()
+        else:
+            logger.info("北京时间非 0–{} 点，跳过 fwalert", FWALERT_BJ_END_HOUR)
     else:
-        logger.info("北京时间非 0–{} 点，跳过 Bark", BARK_BJ_END_HOUR)
+        logger.warning("冷却 {:.0f}s 内跳过邮件与 fwalert", COOLDOWN_SEC - (now - last))
 
 
 if __name__ == "__main__":
