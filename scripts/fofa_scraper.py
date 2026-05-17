@@ -36,17 +36,28 @@ async def main():
 
     try:
         date = (datetime.now() - timedelta(days=random.randint(1, 730))).strftime("%Y-%m-%d")
-        q_oai = f'((body="gemini")) && after="{date}"'
-        q_ggl = f'(body="AIzaSy{random.choice("ABCD")}") && after="{date}"'
-        logger.info(f"FOFA 查询[OpenAI]: {q_oai}")
-        logger.info(f"FOFA 查询[Google]: {q_ggl}")
-
-        hosts_openai, hosts_google = await asyncio.gather(
-            fofa_search(q_oai, size=fofa_size),
-            fofa_search(q_ggl, size=fofa_size),
+        queries: list[tuple[str, str]] = [
+            ("gemini", f'((body="gemini")) && after="{date}"'),
+            ("gemini2", f'(body="AIzaSy{random.choice("ABCD")}") && after="{date}"'),
+            ("openai", f'((body="openai")) && after="{date}"'),
+            ("openai2", f'((body="sk-proj-")) && after="{date}"'),
+            ("claude", f'((body="claude")) && after="{date}"'),
+            ("claude2", f'((body="sk-ant-api03-")) && after="{date}"'),
+        ]
+        (name_a, q_a), (name_b, q_b) = random.sample(queries, 2)
+        hosts_a, hosts_b = await asyncio.gather(
+            fofa_search(q_a, size=fofa_size),
+            fofa_search(q_b, size=fofa_size),
         )
-        hosts = sorted(set(hosts_openai) | set(hosts_google))
-        logger.info(f"共找到 {len(hosts)} 个目标 (OpenAI:{len(hosts_openai)}, Google:{len(hosts_google)})")
+        hosts = sorted(set(hosts_a) | set(hosts_b))
+        logger.info(
+            "共找到 {} 个目标 ({}:{}, {}:{})",
+            len(hosts),
+            name_a,
+            len(hosts_a),
+            name_b,
+            len(hosts_b),
+        )
 
         if not hosts:
             logger.warning("FOFA 未返回任何目标，退出")
