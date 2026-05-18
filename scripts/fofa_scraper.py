@@ -40,9 +40,9 @@ async def main():
             ("gemini", f'((body="gemini")) && after="{date}"'),
             ("gemini2", f'(body="AIzaSy{random.choice("ABCD")}") && after="{date}"'),
             ("openai", f'((body="openai")) && after="{date}"'),
-            ("openai2", f'((body="sk-proj-")) && after="{date}"'),
-            ("claude", f'((body="claude")) && after="{date}"'),
-            ("claude2", f'((body="sk-ant-api03-")) && after="{date}"'),
+            ("openai2", f'((body="sk-")) && after="{date}"'),
+            ("claude", f'((body="anthropic")) && after="{date}"'),
+            ("claude2", f'((body="sk-ant-")) && after="{date}"'),
         ]
         (name_a, q_a), (name_b, q_b) = random.sample(queries, 2)
         hosts_a, hosts_b = await asyncio.gather(
