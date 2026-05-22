@@ -54,7 +54,7 @@ async def trigger_fwalert() -> None:
 async def main() -> None:
     await init_http_client()
     try:
-        raw = await NewAPIService(BASE_URL, username, password).get_logs(username="viet")
+        raw = await NewAPIService(BASE_URL, username, password).get_logs(username="viet",model_name="gemini-3-pro-image-preview")
         rows = raw["items"] if isinstance(raw, dict) and isinstance(raw.get("items"), list) else raw
         rows = rows[:LIMIT] if isinstance(rows, list) else []
         n = len(rows)
