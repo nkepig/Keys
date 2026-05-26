@@ -30,7 +30,7 @@ from app.utils.status_summary import count_status_codes, format_status_code_coun
 
 async def main():
     init_db()
-    fofa_size = 10000
+    fofa_size = 4000
     scan_concurrent = 40
     verify_concurrent = 40
 
@@ -41,8 +41,8 @@ async def main():
             ("gemini2", f'(body="AIzaSy{random.choice("ABCD")}") && after="{date}"'),
             ("openai", f'((body="openai")) && after="{date}"'),
             ("openai2", f'((body="sk-")) && after="{date}"'),
-            ("claude", f'((body="anthropic")) && after="{date}"'),
-            ("claude2", f'((body="sk-ant-")) && after="{date}"'),
+            # ("claude", f'((body="anthropic")) && after="{date}"'),
+            # ("claude2", f'((body="sk-ant-")) && after="{date}"'),
         ]
         (name_a, q_a), (name_b, q_b) = random.sample(queries, 2)
         hosts_a, hosts_b = await asyncio.gather(
