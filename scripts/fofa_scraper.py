@@ -30,7 +30,7 @@ from app.utils.status_summary import count_status_codes, format_status_code_coun
 
 async def main():
     init_db()
-    fofa_size = 4000
+    fofa_size = 10000
     scan_concurrent = 40
     verify_concurrent = 40
 
@@ -47,7 +47,7 @@ async def main():
         (name_a, q_a), (name_b, q_b) = random.sample(queries, 2)
         hosts_a, hosts_b = await asyncio.gather(
             fofa_search(q_a, size=fofa_size),
-            fofa_search(q_b, size=fofa_size),
+            # fofa_search(q_b, size=fofa_size),
         )
         hosts = sorted(set(hosts_a) | set(hosts_b))
         logger.info(
