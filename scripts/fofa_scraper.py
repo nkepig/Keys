@@ -44,20 +44,9 @@ async def main():
             # ("claude", f'((body="anthropic")) && after="{date}"'),
             # ("claude2", f'((body="sk-ant-")) && after="{date}"'),
         ]
-        (name_a, q_a), (name_b, q_b) = random.sample(queries, 2)
-        hosts_a, hosts_b = await asyncio.gather(
-            fofa_search(q_a, size=fofa_size),
-            # fofa_search(q_b, size=fofa_size),
-        )
-        hosts = sorted(set(hosts_a) | set(hosts_b))
-        logger.info(
-            "共找到 {} 个目标 ({}:{}, {}:{})",
-            len(hosts),
-            name_a,
-            len(hosts_a),
-            name_b,
-            len(hosts_b),
-        )
+        name, query = random.choice(queries)
+        hosts = sorted(await fofa_search(query, size=fofa_size))
+        logger.info("共找到 {} 个目标 ({})", len(hosts), name)
 
         if not hosts:
             logger.warning("FOFA 未返回任何目标，退出")
