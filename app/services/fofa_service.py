@@ -6,7 +6,7 @@ from loguru import logger
 from app.config import settings
 from app.http_client import get_http_session
 
-_BASE_URL = "https://en.fofa.info/api/v1/search/all"
+_BASE_URL = "https://fofax.tech/api/v1/search/all"
 
 
 async def fofa_search(query: str, fields: str = "host", size: int = 10000) -> list[str]:
