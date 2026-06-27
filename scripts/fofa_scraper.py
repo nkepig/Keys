@@ -32,7 +32,7 @@ from app.utils.status_summary import count_status_codes, format_status_code_coun
 async def main():
     init_db()
     fofa_size = 10000
-    min_hosts = 1000
+    min_hosts = 3000
     scan_concurrent = 40
     verify_concurrent = 40
 
