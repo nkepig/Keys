@@ -17,6 +17,7 @@ ExecStart=/bin/bash -lc 'exec uv run uvicorn app.main:app --host 0.0.0.0 --port 
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=30
+LimitNOFILE=65535
 
 ReadWritePaths=/home/user1/keys
 

@@ -33,8 +33,8 @@ async def main():
     init_db()
     fofa_size = 10000
     min_hosts = 5000
-    scan_concurrent = 50
-    verify_concurrent = 50
+    scan_concurrent = 300
+    verify_concurrent = 80
 
     try:
         query_templates: list[tuple[str, str]] = [
