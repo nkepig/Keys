@@ -3,7 +3,7 @@
 FOFA 搜索 → URL 扫描 → 密钥提取 → 批量验证入库
 
 扫站前会按历史表中的站点 netloc 进行去重，7 天内扫描过则跳过。
-去重后不足 1000 个 URL 时会继续 FOFA 检索，凑齐后再扫描。
+去重后不足 1000 个 URL 时会继续 FOFA 检索；达到 1000 后停止检索，当轮全部 URL 均参与扫描（不截断）。
 
 用法:
     python scripts/fofa_scraper.py
@@ -88,8 +88,6 @@ async def main():
 
             n_before = len(hosts)
             for x in raw_hosts:
-                if len(hosts) >= min_hosts:
-                    break
                 n = normalize_netloc(x)
                 if n is not None and n in seen_netlocs:
                     continue
@@ -99,7 +97,7 @@ async def main():
 
             added = len(hosts) - n_before
             logger.info(
-                "第 {} 轮 FOFA ({})：返回 {}，去重后新增 {}，累计 {} / {}",
+                "第 {} 轮 FOFA ({})：返回 {}，去重后新增 {}，累计 {}（目标 {}）",
                 round_num,
                 name,
                 len(raw_hosts),
@@ -112,6 +110,9 @@ async def main():
                 empty_rounds += 1
             else:
                 empty_rounds = 0
+
+            if len(hosts) >= min_hosts:
+                break
 
         if not hosts:
             logger.warning("过滤后命中历史表，无新站点可扫，退出")
