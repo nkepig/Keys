@@ -1,30 +1,21 @@
 [Unit]
 Description=Keys API Key Manager (FastAPI)
-Documentation=https://github.com/nkpig/Keys
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=keys
-Group=keys
+WorkingDirectory=/root/keys
+EnvironmentFile=/root/keys/.env
 
-# 按实际部署路径修改
-WorkingDirectory=/opt/Keys
-EnvironmentFile=/opt/Keys/.env
-
-# 首次部署: cd /opt/Keys && uv sync
-ExecStart=/opt/Keys/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8888 --workers 1
+# 首次部署: cd /root/keys && uv sync
+ExecStart=/root/keys/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8888 --workers 1
 
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=30
 
-# SQLite + 日志/缓存写入
-ReadWritePaths=/opt/Keys
-
-NoNewPrivileges=true
-PrivateTmp=true
+ReadWritePaths=/root/keys
 
 [Install]
 WantedBy=multi-user.target
