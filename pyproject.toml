@@ -17,4 +17,5 @@ dependencies = [
   "itsdangerous>=2.2.0",
   "loguru>=0.7.3",
   "drissionpage>=4.1.1.2",
+  "uvicorn",
 ]
