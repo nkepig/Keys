@@ -12,7 +12,7 @@ EnvironmentFile=/home/user1/keys/.env
 Environment=PATH=/home/user1/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # 与 1Panel 定时任务一致：uv run（首次部署: sudo -u user1 -H bash -lc 'cd /home/user1/keys && uv sync'）
-ExecStart=/bin/bash -lc 'exec uv run python -m uvicorn app.main:app --host 0.0.0.0 --port 8888 --workers 1'
+ExecStart=/bin/bash -lc 'exec uv run uvicorn app.main:app --host 0.0.0.0 --port 8888 --workers 1'
 
 Restart=on-failure
 RestartSec=5
