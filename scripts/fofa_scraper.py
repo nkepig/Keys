@@ -3,6 +3,7 @@
 FOFA 搜索 → URL 扫描 → 密钥提取 → 批量验证入库
 
 扫站前会按历史表中的站点 netloc 进行去重，7 天内扫描过则跳过。
+去重后不足 1000 个 URL 时会继续 FOFA 检索，凑齐后再扫描。
 
 用法:
     python scripts/fofa_scraper.py
@@ -31,31 +32,24 @@ from app.utils.status_summary import count_status_codes, format_status_code_coun
 async def main():
     init_db()
     fofa_size = 10000
+    min_hosts = 1000
     scan_concurrent = 40
     verify_concurrent = 40
 
     try:
-        date = (datetime.now() - timedelta(days=random.randint(1, 730))).strftime("%Y-%m-%d")
-        queries: list[tuple[str, str]] = [
-            ("gemini", f'((body="gemini")) && after="{date}"'),
-            ("gemini2", f'(body="AIzaSy{random.choice("ABCD")}") && after="{date}"'),
-            ("gemini3", f'(body="GoogleGenAI") && after="{date}"'),
-            ("gemini4", f'(body="googleapis") && after="{date}"'),
-            ("gemini5", f'(body="generateContent") && after="{date}"'),
-            ("gemini6", f'(body="x-goog-api-key") && after="{date}"'),
-            ("gemini7", f'(body="GEMINI_API_KEY") && after="{date}"'),
-            ("openai", f'((body="openai")) && after="{date}"'),
-            ("openai2", f'((body="sk-")) && after="{date}"'),
-            # ("claude", f'((body="anthropic")) && after="{date}"'),
-            # ("claude2", f'((body="sk-ant-")) && after="{date}"'),
+        query_templates: list[tuple[str, str]] = [
+            ("gemini", '((body="gemini")) && after="{date}"'),
+            ("gemini2", '(body="AIzaSy{prefix}") && after="{date}"'),
+            ("gemini3", '(body="GoogleGenAI") && after="{date}"'),
+            ("gemini4", '(body="googleapis") && after="{date}"'),
+            ("gemini5", '(body="generateContent") && after="{date}"'),
+            ("gemini6", '(body="x-goog-api-key") && after="{date}"'),
+            ("gemini7", '(body="GEMINI_API_KEY") && after="{date}"'),
+            ("openai", '((body="openai")) && after="{date}"'),
+            ("openai2", '((body="sk-")) && after="{date}"'),
+            # ("claude", '((body="anthropic")) && after="{date}"'),
+            # ("claude2", '((body="sk-ant-")) && after="{date}"'),
         ]
-        name, query = random.choice(queries)
-        hosts = sorted(await fofa_search(query, size=fofa_size))
-        logger.info("共找到 {} 个目标 ({})", len(hosts), name)
-
-        if not hosts:
-            logger.warning("FOFA 未返回任何目标，退出")
-            return
 
         pruned = prune_scan_history(window_days=SCAN_HISTORY_WINDOW_DAYS)
         known = load_recent_scan_history_targets(
@@ -63,20 +57,68 @@ async def main():
             match_type=SCAN_HISTORY_MATCH_NETLOC,
             window_days=SCAN_HISTORY_WINDOW_DAYS,
         )
-
-        n0 = len(hosts)
-        hosts = [x for x in hosts if (n := normalize_netloc(x)) is None or n not in known]
         logger.info(
-            "按 {} 天历史表（netloc）过滤: 跳过 {} 个重复站点，剩余 {} 个待扫描（历史站点 {}，清理过期 {}）",
+            "历史表（netloc，{} 天）: {} 个已知站点，清理过期 {} 个",
             SCAN_HISTORY_WINDOW_DAYS,
-            n0 - len(hosts),
-            len(hosts),
             len(known),
             pruned,
         )
+
+        hosts: list[str] = []
+        seen_netlocs: set[str] = set(known)
+        round_num = 0
+        empty_rounds = 0
+        max_empty_rounds = len(query_templates) * 3
+
+        while len(hosts) < min_hosts:
+            round_num += 1
+            if empty_rounds >= max_empty_rounds:
+                logger.warning(
+                    "连续 {} 轮检索无新增站点，已累积 {} 个（目标 {}），停止检索",
+                    empty_rounds,
+                    len(hosts),
+                    min_hosts,
+                )
+                break
+
+            date = (datetime.now() - timedelta(days=random.randint(1, 730))).strftime("%Y-%m-%d")
+            name, tmpl = random.choice(query_templates)
+            query = tmpl.format(date=date, prefix=random.choice("ABCD"))
+            raw_hosts = await fofa_search(query, size=fofa_size)
+
+            n_before = len(hosts)
+            for x in raw_hosts:
+                if len(hosts) >= min_hosts:
+                    break
+                n = normalize_netloc(x)
+                if n is not None and n in seen_netlocs:
+                    continue
+                hosts.append(x)
+                if n is not None:
+                    seen_netlocs.add(n)
+
+            added = len(hosts) - n_before
+            logger.info(
+                "第 {} 轮 FOFA ({})：返回 {}，去重后新增 {}，累计 {} / {}",
+                round_num,
+                name,
+                len(raw_hosts),
+                added,
+                len(hosts),
+                min_hosts,
+            )
+
+            if added == 0:
+                empty_rounds += 1
+            else:
+                empty_rounds = 0
+
         if not hosts:
             logger.warning("过滤后命中历史表，无新站点可扫，退出")
             return
+
+        if len(hosts) < min_hosts:
+            logger.warning("未达到目标 {} 个 URL，将扫描已累积的 {} 个", min_hosts, len(hosts))
 
         all_keys = await scan_urls(hosts, concurrent=scan_concurrent)
         saved_history = save_scan_history(hosts, source="fofa", match_type=SCAN_HISTORY_MATCH_NETLOC)
