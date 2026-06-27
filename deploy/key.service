@@ -5,17 +5,19 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=/root/keys
-EnvironmentFile=/root/keys/.env
+User=user1
+Group=user1
+WorkingDirectory=/home/user1/keys
+EnvironmentFile=/home/user1/keys/.env
 
-# 首次部署: cd /root/keys && uv sync
-ExecStart=/root/keys/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8888 --workers 1
+# 首次部署（必须用 user1 执行）: cd /home/user1/keys && uv sync
+ExecStart=/home/user1/keys/.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8888 --workers 1
 
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=30
 
-ReadWritePaths=/root/keys
+ReadWritePaths=/home/user1/keys
 
 [Install]
 WantedBy=multi-user.target
