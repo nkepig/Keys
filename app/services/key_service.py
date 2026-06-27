@@ -10,6 +10,7 @@ import json
 import re
 
 import aiohttp
+from loguru import logger
 
 from sqlmodel import Session, select
 
@@ -105,12 +106,16 @@ def db_insert_key(
         return obj
 
 
-def db_get_existing_keys(keys: list[str]) -> frozenset[str]:
-    """一次 IN 查询，返回已存在的 key 集合。"""
+def db_get_existing_keys(keys: list[str], chunk_size: int = 500) -> frozenset[str]:
+    """分批 IN 查询，返回已存在的 key 集合（规避 SQLite 变量数上限）。"""
     if not keys:
         return frozenset()
+    found: set[str] = set()
     with Session(engine) as session:
-        return frozenset(session.exec(select(Key.key).where(Key.key.in_(keys))).all())
+        for i in range(0, len(keys), chunk_size):
+            chunk = keys[i : i + chunk_size]
+            found.update(session.exec(select(Key.key).where(Key.key.in_(chunk))).all())
+    return frozenset(found)
 
 
 def db_get_key(key_id: int) -> Key | None:
@@ -312,10 +317,12 @@ async def batch_process_keys(
     if not rows:
         return []
 
+    logger.info("去重后 {} 条密钥，正在查询库内已存在记录...", len(rows))
     candidate_keys = [ck for _, ck in (detect_provider_and_key(r["key"]) for r in rows) if ck]
     existing = await asyncio.to_thread(db_get_existing_keys, candidate_keys)
 
-    skip_results, tasks = [], []
+    skip_results: list[dict] = []
+    to_verify: list[dict] = []
     for row in rows:
         _, clean_key = detect_provider_and_key(row["key"])
         if clean_key and clean_key in existing:
@@ -326,9 +333,32 @@ async def batch_process_keys(
                 "saved": False, "error": "已存在，跳过",
             })
         else:
-            tasks.append(process_key(row["key"], row["origin"]))
+            to_verify.append(row)
 
-    verify_results = await gather_limited(tasks, concurrent=concurrent) if tasks else []
+    total_verify = len(to_verify)
+    logger.info(
+        "库内已存在 {} 条，待校验 {} 条，并发数: {}",
+        len(skip_results), total_verify, concurrent,
+    )
+
+    verify_results: list[dict] = []
+    if to_verify:
+        for i in range(0, total_verify, concurrent):
+            batch = to_verify[i : i + concurrent]
+            batch_results = await gather_limited(
+                [process_key(r["key"], r["origin"]) for r in batch],
+                concurrent=len(batch),
+            )
+            verify_results.extend(batch_results)
+            done = i + len(batch)
+            saved_so_far = sum(1 for r in verify_results if r.get("saved"))
+            logger.info(
+                "校验进度: {}/{} (本批 {} 条，累计入库 {})",
+                done, total_verify, len(batch), saved_so_far,
+            )
+
+    saved = sum(1 for r in verify_results if r.get("saved"))
+    logger.info("校验完成：新入库 {} 条，未入库 {} 条", saved, total_verify - saved)
     return skip_results + verify_results
 
 

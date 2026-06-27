@@ -39,6 +39,11 @@ async def main():
         queries: list[tuple[str, str]] = [
             ("gemini", f'((body="gemini")) && after="{date}"'),
             ("gemini2", f'(body="AIzaSy{random.choice("ABCD")}") && after="{date}"'),
+            ("gemini3", f'(body="GoogleGenAI") && after="{date}"'),
+            ("gemini4", f'(body="googleapis") && after="{date}"'),
+            ("gemini5", f'(body="generateContent") && after="{date}"'),
+            ("gemini6", f'(body="x-goog-api-key") && after="{date}"'),
+            ("gemini7", f'(body="GEMINI_API_KEY") && after="{date}"'),
             ("openai", f'((body="openai")) && after="{date}"'),
             ("openai2", f'((body="sk-")) && after="{date}"'),
             # ("claude", f'((body="anthropic")) && after="{date}"'),
