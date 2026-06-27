@@ -32,9 +32,9 @@ from app.utils.status_summary import count_status_codes, format_status_code_coun
 async def main():
     init_db()
     fofa_size = 10000
-    min_hosts = 3000
-    scan_concurrent = 40
-    verify_concurrent = 40
+    min_hosts = 5000
+    scan_concurrent = 50
+    verify_concurrent = 50
 
     try:
         query_templates: list[tuple[str, str]] = [
