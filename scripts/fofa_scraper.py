@@ -40,15 +40,16 @@ async def main():
         query_templates: list[tuple[str, str]] = [
             ("gemini", '((body="gemini")) && after="{date}"'),
             ("gemini2", '(body="AIzaSy{prefix}") && after="{date}"'),
-            ("gemini3", '(body="GoogleGenAI") && after="{date}"'),
-            ("gemini4", '(body="googleapis") && after="{date}"'),
-            ("gemini5", '(body="generateContent") && after="{date}"'),
-            ("gemini6", '(body="x-goog-api-key") && after="{date}"'),
-            ("gemini7", '(body="GEMINI_API_KEY") && after="{date}"'),
+            ("gemini3", '(body="googleapis") && after="{date}"'),
+            ("gemini4", '(body="generateContent") && after="{date}"'),
+            ("gemini5", '(body="x-goog-api-key") && after="{date}"'),
+            ("gemini6", '(body="GEMINI_API_KEY") && after="{date}"'),
             ("openai", '((body="openai")) && after="{date}"'),
-            ("openai2", '((body="sk-")) && after="{date}"'),
-            # ("claude", '((body="anthropic")) && after="{date}"'),
-            # ("claude2", '((body="sk-ant-")) && after="{date}"'),
+            ("openai2", '((body="sk-proj-")) && after="{date}"'),
+            ("openai3", '((body="OPENAI_API_KEY")) && after="{date}"'),
+            ("claude", '((body="ANTHROPIC_API_KEY")) && after="{date}"'),
+            ("claude2", '((body="sk-ant-")) && after="{date}"'),
+            ("claude3", '((body="claude")) && after="{date}"'),
         ]
 
         pruned = prune_scan_history(window_days=SCAN_HISTORY_WINDOW_DAYS)
