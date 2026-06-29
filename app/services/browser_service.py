@@ -71,7 +71,7 @@ Object.defineProperty(MouseEvent.prototype, 'screenY', { value: screenY });"""
             self.co.set_argument("--headless=new")
 
         if browser_path:
-            self.co.set_argument(browser_path=browser_path)
+            self.co.set_browser_path(path=browser_path)
 
         if platform.system() == "Linux":
             try:
