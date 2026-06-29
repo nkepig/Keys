@@ -37,19 +37,17 @@ async def main():
     verify_concurrent = 80
 
     try:
+        # 宽泛查询（无时间限制）+ 少量近期查询；避免过多细分模板导致反复命中空结果
         query_templates: list[tuple[str, str]] = [
-            ("gemini", '((body="gemini")) && after="{date}"'),
-            ("gemini2", '(body="AIzaSy{prefix}") && after="{date}"'),
-            ("gemini3", '(body="googleapis") && after="{date}"'),
-            ("gemini4", '(body="generateContent") && after="{date}"'),
-            ("gemini5", '(body="x-goog-api-key") && after="{date}"'),
-            ("gemini6", '(body="GEMINI_API_KEY") && after="{date}"'),
-            ("openai", '((body="openai")) && after="{date}"'),
-            ("openai2", '((body="sk-proj-")) && after="{date}"'),
-            ("openai3", '((body="OPENAI_API_KEY")) && after="{date}"'),
-            ("claude", '((body="ANTHROPIC_API_KEY")) && after="{date}"'),
-            ("claude2", '((body="sk-ant-")) && after="{date}"'),
-            ("claude3", '((body="claude")) && after="{date}"'),
+            ("openai", 'body="sk-" && (body="openai" || body="OPENAI_API_KEY")'),
+            ("openai2", 'body="sk-proj-" || body="openai.com"'),
+            ("claude", 'body="sk-ant-" || body="ANTHROPIC_API_KEY"'),
+            ("claude2", 'body="claude" && body="api"'),
+            ("gemini", 'body="AIzaSy" || body="GEMINI_API_KEY"'),
+            ("gemini2", 'body="googleapis" && body="generativelanguage"'),
+            ("openai_recent", 'body="sk-" && after="{date}"'),
+            ("claude_recent", 'body="sk-ant-" && after="{date}"'),
+            ("gemini_recent", 'body="AIzaSy" && after="{date}"'),
         ]
 
         pruned = prune_scan_history(window_days=SCAN_HISTORY_WINDOW_DAYS)
@@ -82,9 +80,9 @@ async def main():
                 )
                 break
 
-            date = (datetime.now() - timedelta(days=random.randint(1, 730))).strftime("%Y-%m-%d")
+            date = (datetime.now() - timedelta(days=random.randint(1, 100))).strftime("%Y-%m-%d")
             name, tmpl = random.choice(query_templates)
-            query = tmpl.format(date=date, prefix=random.choice("ABCD"))
+            query = tmpl.format(date=date) if "{date}" in tmpl else tmpl
             raw_hosts = await fofa_search(query, size=fofa_size)
 
             n_before = len(hosts)
