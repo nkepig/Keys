@@ -39,15 +39,12 @@ async def main():
     try:
         # 宽泛查询（无时间限制）+ 少量近期查询；避免过多细分模板导致反复命中空结果
         query_templates: list[tuple[str, str]] = [
-            ("openai", 'body="sk-" && (body="openai" || body="OPENAI_API_KEY")'),
-            ("openai2", 'body="sk-proj-" || body="openai.com"'),
-            ("claude", 'body="sk-ant-" || body="ANTHROPIC_API_KEY"'),
-            ("claude2", 'body="claude" && body="api"'),
-            ("gemini", 'body="AIzaSy" || body="GEMINI_API_KEY"'),
-            ("gemini2", 'body="googleapis" && body="generativelanguage"'),
-            ("openai_recent", 'body="sk-" && after="{date}"'),
-            ("claude_recent", 'body="sk-ant-" && after="{date}"'),
-            ("gemini_recent", 'body="AIzaSy" && after="{date}"'),
+            ("openai", '(body="sk-" || body="OPENAI_API_KEY") && after="{date}"'),
+            ("openai2", 'body="sk-proj-" && after="{date}"'),
+            ("claude", '(body="sk-ant-" || body="ANTHROPIC_API_KEY") && after="{date}"'),
+            ("claude2", 'body="claude" && after="{date}"'),
+            ("gemini", '(body="AIzaSy" || body="GEMINI_API_KEY") && after="{date}"'),
+            ("gemini2", '(body="googleapis" || body="generativelanguage") && after="{date}"'),
         ]
 
         pruned = prune_scan_history(window_days=SCAN_HISTORY_WINDOW_DAYS)
