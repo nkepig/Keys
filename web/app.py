@@ -357,7 +357,7 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;}
         <button type="button" class="picker-brand-toggle w-full min-h-12 px-4 py-3 flex items-center text-left hover:bg-gray-50 transition" aria-expanded="false">
           <span class="flex-1 min-w-0">
             <span class="block font-semibold text-gray-900 text-sm">{{ group['brand'] }}</span>
-            <span class="block text-xs text-gray-400 mt-0.5">{{ picker_items|length }} 个型号 · 共 {{ sum(i.quantity for i in picker_items) }} 件</span>
+            <span class="block text-xs text-gray-400 mt-0.5">{{ picker_items|length }} 个型号 · 共 {{ picker_items|sum(attribute='quantity') }} 件</span>
           </span>
           <svg class="picker-chevron w-5 h-5 text-gray-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m9 18 6-6-6-6"/></svg>
         </button>
@@ -442,6 +442,13 @@ document.querySelectorAll('.brand-toggle').forEach(button=>button.addEventListen
   button.setAttribute('aria-expanded',String(!expanded));
   models.classList.toggle('hidden',expanded);
   button.querySelector('.brand-chevron').classList.toggle('rotate-90',!expanded);
+}));
+document.querySelectorAll('.picker-brand-toggle').forEach(button=>button.addEventListener('click',()=>{
+  const models=button.nextElementSibling;
+  const expanded=button.getAttribute('aria-expanded')==='true';
+  button.setAttribute('aria-expanded',String(!expanded));
+  models.classList.toggle('hidden',expanded);
+  button.querySelector('.picker-chevron').classList.toggle('rotate-90',!expanded);
 }));
 document.getElementById('inventory-search').addEventListener('input',event=>{
   const query=event.target.value.trim().toLocaleLowerCase('zh-CN');
