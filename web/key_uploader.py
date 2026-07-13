@@ -37,7 +37,7 @@ TIMEOUT: Final = 60.0
 
 class UploadRequest(BaseModel):
     model_config = ConfigDict(frozen=True)
-    category: str = "anthropic"
+    category: str = "openai"
     keys_text: str = ""
 
 
@@ -297,28 +297,40 @@ LOGIN_PAGE = """<!doctype html>
 <link rel="icon" href="data:,">
 <title>登录</title>
 <style>
-:root{--canvas:#f7f7f5;--surface:#fff;--text:#20201e;--muted:#77746f;--border:#e5e3df;--accent:#1769d2;--hover:#1058b6;--error:#b54435}
-*{box-sizing:border-box}
-body{margin:0;background:var(--canvas);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased;display:flex;align-items:center;justify-content:center;min-height:100vh}
-.card{width:min(360px,calc(100% - 48px));background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:36px 32px}
-h1{margin:0 0 28px;font-size:20px;font-weight:650;text-align:center}
-label{display:block;margin-bottom:6px;font-size:13px;font-weight:500}
-input{display:block;width:100%;margin-bottom:18px;padding:11px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font:14px inherit;transition:border-color .15s,box-shadow .15s}
-input:focus{outline:0;border-color:var(--accent);box-shadow:0 0 0 3px rgba(23,105,210,.12)}
-button{width:100%;min-height:44px;border:0;border-radius:8px;background:var(--accent);color:#fff;font:600 14px inherit;cursor:pointer;transition:background .15s}
-button:hover{background:var(--hover)}
-.feedback{min-height:20px;margin-top:12px;color:var(--error);font-size:13px;text-align:center}
+:root{--bg1:#eef2ff;--bg2:#f8fafc;--bg3:#faf5ff;--surface:rgba(255,255,255,.72);--text:#1e1b2e;--muted:#6b6786;--border:rgba(99,102,241,.12);--accent:#6366f1;--accent2:#8b5cf6;--error:#ef4444}
+*{box-sizing:border-box;margin:0;padding:0}
+body{min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;font-size:14px;color:var(--text);background:linear-gradient(135deg,var(--bg1) 0%,var(--bg2) 50%,var(--bg3) 100%);position:relative;overflow:hidden}
+body::before{content:'';position:absolute;top:-30%;left:-10%;width:60%;height:80%;background:radial-gradient(ellipse,rgba(99,102,241,.12),transparent 60%);filter:blur(40px);animation:float1 12s ease-in-out infinite}
+body::after{content:'';position:absolute;bottom:-30%;right:-10%;width:55%;height:70%;background:radial-gradient(ellipse,rgba(139,92,246,.1),transparent 60%);filter:blur(40px);animation:float2 14s ease-in-out infinite}
+@keyframes float1{50%{transform:translate(40px,30px)}}
+@keyframes float2{50%{transform:translate(-30px,-20px)}}
+.card{position:relative;width:min(380px,calc(100% - 40px));background:var(--surface);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);border:1px solid var(--border);border-radius:20px;padding:40px 36px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 12px 40px rgba(99,102,241,.08),0 4px 12px rgba(0,0,0,.03);animation:cardIn .6s cubic-bezier(.16,1,.3,1)}
+@keyframes cardIn{from{opacity:0;transform:translateY(24px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+.logo{width:48px;height:48px;margin:0 auto 20px;border-radius:14px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(99,102,241,.25);animation:cardIn .6s .1s cubic-bezier(.16,1,.3,1) backwards}
+.logo svg{width:24px;height:24px;color:#fff}
+h1{margin-bottom:6px;font-size:22px;font-weight:700;letter-spacing:-.02em;text-align:center}
+.subtitle{text-align:center;color:var(--muted);font-size:13px;margin-bottom:32px}
+label{display:block;margin-bottom:6px;font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.02em;text-transform:uppercase}
+input{width:100%;margin-bottom:22px;padding:13px 16px;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,.6);color:var(--text);font:14px inherit;transition:all .2s}
+input:focus{outline:0;border-color:var(--accent);background:rgba(255,255,255,.9);box-shadow:0 0 0 4px rgba(99,102,241,.1)}
+button{width:100%;min-height:46px;border:0;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font:600 15px inherit;cursor:pointer;transition:transform .15s,box-shadow .15s;box-shadow:0 4px 14px rgba(99,102,241,.3)}
+button:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(99,102,241,.35)}
+button:active{transform:translateY(0)}
+.feedback{min-height:22px;margin-top:14px;color:var(--error);font-size:13px;text-align:center}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
 <div class="card">
-  <h1>登录</h1>
+  <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+  <h1>欢迎回来</h1>
+  <p class="subtitle">请登录以管理您的 Key</p>
   <form id="form">
     <label for="username">账号</label>
     <input id="username" name="username" autocomplete="username" required>
     <label for="password">密码</label>
     <input id="password" name="password" type="password" autocomplete="current-password" required>
-    <button type="submit">登录</button>
+    <button type="submit">登 录</button>
     <div id="feedback" class="feedback" role="alert"></div>
   </form>
 </div>
@@ -345,66 +357,87 @@ HTML_PAGE = """<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="上传 Key 并查看用量">
 <link rel="icon" href="data:,">
-<title>Key 用量</title>
+<title>Key 管理</title>
 <style>
-:root{--canvas:#f7f7f5;--surface:#fff;--text:#20201e;--muted:#77746f;--border:#e5e3df;--accent:#1769d2;--hover:#1058b6;--success:#237a42;--error:#b54435}
-*{box-sizing:border-box}
-body{margin:0;background:var(--canvas);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
-main{width:min(720px,calc(100% - 48px));margin:0 auto;padding:56px 0 80px}
-.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:40px}
-h1{margin:0;font-size:24px;font-weight:650;letter-spacing:-.02em}
-.logout{padding:6px 14px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--muted);font:500 13px inherit;cursor:pointer;transition:border-color .15s,color .15s}
-.logout:hover{border-color:var(--accent);color:var(--accent)}
-section+section{margin-top:40px}
-.heading{margin-bottom:12px}
-h2{margin:0;font-size:15px;font-weight:600}
-label{display:block;margin-bottom:8px;font-size:13px;font-weight:500}
-select{display:block;width:100%;max-width:260px;margin-bottom:12px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font:13px inherit;cursor:pointer;transition:border-color .15s,box-shadow .15s}
-select:focus{outline:0;border-color:var(--accent);box-shadow:0 0 0 3px rgba(23,105,210,.12)}
-textarea{display:block;width:100%;min-height:180px;padding:14px 16px;resize:vertical;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font:13px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;transition:border-color .15s,box-shadow .15s}
-textarea:focus{outline:0;border-color:var(--accent);box-shadow:0 0 0 3px rgba(23,105,210,.12)}
-.actions{display:flex;align-items:center;gap:12px;margin-top:12px}
-button{min-height:44px;padding:0 20px;border:0;border-radius:7px;background:var(--accent);color:#fff;font:600 14px inherit;cursor:pointer;transition:background .15s,opacity .15s}
-button:hover{background:var(--hover)}
-button:focus-visible{outline:3px solid rgba(23,105,210,.25);outline-offset:2px}
-button:disabled{cursor:wait;opacity:.55}
-.feedback{min-height:22px;color:var(--muted)}
-.feedback.success{color:var(--success)}
-.feedback.error{color:var(--error)}
-.list{overflow:hidden;border:1px solid var(--border);border-radius:8px;background:var(--surface)}
+:root{--bg1:#eef2ff;--bg2:#f8fafc;--bg3:#faf5ff;--surface:rgba(255,255,255,.72);--surface-solid:#fff;--text:#1e1b2e;--muted:#6b6786;--border:rgba(99,102,241,.12);--accent:#6366f1;--accent2:#8b5cf6;--hover:#4f46e5;--success:#10b981;--success-bg:rgba(16,185,129,.1);--error:#ef4444;--error-bg:rgba(239,68,68,.1)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;font-size:14px;color:var(--text);background:linear-gradient(135deg,var(--bg1) 0%,var(--bg2) 50%,var(--bg3) 100%);position:relative;overflow-x:hidden}
+body::before{content:'';position:fixed;top:-20%;left:-10%;width:50%;height:60%;background:radial-gradient(ellipse,rgba(99,102,241,.1),transparent 60%);filter:blur(60px);pointer-events:none;animation:float1 14s ease-in-out infinite}
+body::after{content:'';position:fixed;bottom:-20%;right:-10%;width:50%;height:60%;background:radial-gradient(ellipse,rgba(139,92,246,.08),transparent 60%);filter:blur(60px);pointer-events:none;animation:float2 16s ease-in-out infinite}
+@keyframes float1{50%{transform:translate(30px,20px)}}
+@keyframes float2{50%{transform:translate(-20px,-15px)}}
+main{position:relative;width:min(820px,calc(100% - 48px));margin:0 auto;padding:56px 0 80px}
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:44px;animation:slideUp .6s cubic-bezier(.16,1,.3,1)}
+h1{font-size:28px;font-weight:700;letter-spacing:-.025em;background:linear-gradient(135deg,var(--text),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.logout{padding:8px 18px;border:1px solid var(--border);border-radius:10px;background:var(--surface);backdrop-filter:blur(12px);color:var(--muted);font:500 13px inherit;cursor:pointer;transition:all .2s}
+.logout:hover{border-color:var(--accent);color:var(--accent);box-shadow:0 4px 12px rgba(99,102,241,.12)}
+section{animation:slideUp .6s cubic-bezier(.16,1,.3,1) backwards}
+section:nth-child(2){animation-delay:.1s}
+section+section{margin-top:36px}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.card{background:var(--surface);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);border:1px solid var(--border);border-radius:16px;padding:28px 28px 24px;box-shadow:0 1px 2px rgba(0,0,0,.03),0 8px 32px rgba(99,102,241,.06),0 2px 8px rgba(0,0,0,.02)}
+.heading{margin-bottom:16px}
+h2{font-size:16px;font-weight:600;letter-spacing:-.01em}
+label{display:block;margin-bottom:8px;font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.03em;text-transform:uppercase}
+select{display:block;width:100%;max-width:280px;margin-bottom:14px;padding:11px 14px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.6);color:var(--text);font:14px inherit;cursor:pointer;transition:all .2s}
+select:focus{outline:0;border-color:var(--accent);background:rgba(255,255,255,.9);box-shadow:0 0 0 4px rgba(99,102,241,.1)}
+textarea{display:block;width:100%;min-height:170px;padding:14px 16px;resize:vertical;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.6);color:var(--text);font:13px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;transition:all .2s}
+textarea:focus{outline:0;border-color:var(--accent);background:rgba(255,255,255,.9);box-shadow:0 0 0 4px rgba(99,102,241,.1)}
+textarea::placeholder{color:var(--muted);opacity:.6}
+.actions{display:flex;align-items:center;gap:14px;margin-top:16px}
+button{min-height:44px;padding:0 26px;border:0;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font:600 14px inherit;cursor:pointer;transition:transform .15s,box-shadow .15s;box-shadow:0 4px 14px rgba(99,102,241,.25)}
+button:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(99,102,241,.3)}
+button:active{transform:translateY(0)}
+button:focus-visible{outline:3px solid rgba(99,102,241,.3);outline-offset:2px}
+button:disabled{cursor:wait;opacity:.6;transform:none}
+.feedback{min-height:22px;color:var(--muted);font-size:13px}
+.feedback.success{color:var(--success);font-weight:500}
+.feedback.error{color:var(--error);font-weight:500}
+.list{overflow:hidden;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,.55);backdrop-filter:blur(16px);box-shadow:0 4px 24px rgba(99,102,241,.05)}
 table{width:100%;border-collapse:collapse}
-th,td{padding:13px 16px;text-align:left;border-bottom:1px solid var(--border)}
-th{color:var(--muted);font-size:12px;font-weight:500;background:#fbfbfa;white-space:nowrap}
+th,td{padding:14px 18px;text-align:left;border-bottom:1px solid var(--border)}
+th{color:var(--muted);font-size:11px;font-weight:600;background:rgba(99,102,241,.04);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
 th:nth-last-child(-n+2),td:nth-last-child(-n+2){text-align:right}
+tbody tr{transition:background .15s}
+tbody tr:hover{background:rgba(99,102,241,.03)}
 tbody tr:last-child td{border-bottom:0}
-td:first-child{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+td:first-child{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
 td:nth-last-child(-n+2){font-variant-numeric:tabular-nums}
-.status-on{color:var(--success);font-weight:500}
-.status-off{color:var(--error);font-weight:500}
-.state{padding:36px 16px;text-align:center;color:var(--muted)}
-.spinner{display:inline-block;width:13px;height:13px;margin-right:8px;vertical-align:-2px;border:2px solid rgba(255,255,255,.45);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:600}
+.badge::before{content:'';width:6px;height:6px;border-radius:50%}
+.badge-on{background:var(--success-bg);color:var(--success)}
+.badge-on::before{background:var(--success);box-shadow:0 0 6px rgba(16,185,129,.5)}
+.badge-off{background:var(--error-bg);color:var(--error)}
+.badge-off::before{background:var(--error);box-shadow:0 0 6px rgba(239,68,68,.4)}
+.state{padding:48px 16px;text-align:center;color:var(--muted);font-size:14px}
+.spinner{display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-@media(max-width:520px){main{width:min(100% - 32px,720px);padding-top:32px}h1{margin-bottom:32px}th,td{padding:12px}}
-@media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+@media(max-width:640px){main{width:min(100% - 32px,820px);padding-top:36px}h1{font-size:22px}th,td{padding:12px 10px;font-size:12px}td:first-child{font-size:12px}.card{padding:20px 18px}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
 <main>
-  <div class="topbar"><h1>Key 用量</h1><button id="logout" class="logout" type="button">退出</button></div>
+  <div class="topbar">
+    <h1>Key 管理</h1>
+    <button id="logout" class="logout" type="button">退出登录</button>
+  </div>
   <section>
-    <label for="category">上传 Key</label>
-    <select id="category">
-      <option value="anthropic">Anthropic</option>
-      <option value="anthropic_small">Anthropic (小额度)</option>
-      <option value="openai">OpenAI</option>
-      <option value="aws">AWS</option>
-      <option value="azure">Azure</option>
-      <option value="ai_studio">AI Studio</option>
-    </select>
-    <textarea id="keys" placeholder="每行一个 Key" spellcheck="false"></textarea>
-    <div class="actions">
-      <button id="upload" type="button">上传</button>
-      <span id="feedback" class="feedback" role="status" aria-live="polite"></span>
+    <div class="card">
+      <label for="category">上传 Key</label>
+      <select id="category">
+        <option value="anthropic">Anthropic</option>
+        <option value="anthropic_small">Anthropic (小额度)</option>
+        <option value="openai" selected>OpenAI</option>
+        <option value="aws">AWS</option>
+        <option value="azure">Azure</option>
+        <option value="ai_studio">AI Studio</option>
+      </select>
+      <textarea id="keys" placeholder="每行一个 Key" spellcheck="false"></textarea>
+      <div class="actions">
+        <button id="upload" type="button">上传</button>
+        <span id="feedback" class="feedback" role="status" aria-live="polite"></span>
+      </div>
     </div>
   </section>
   <section>
@@ -430,7 +463,7 @@ category.addEventListener('change',()=>{keys.placeholder=placeholders[category.v
 keys.placeholder=placeholders[category.value];
 const escapeHtml=value=>String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const formatNum=value=>typeof value==='number'?value.toLocaleString():escapeHtml(value??0);
-const statusClass=value=>value==='开启'?'status-on':value==='停用'?'status-off':'';
+const badge=status=>{const cls=status==='开启'?'badge-on':status==='停用'?'badge-off':'';return cls?'<span class="badge '+cls+'">'+escapeHtml(status)+'</span>':'<span>'+escapeHtml(status)+'</span>';};
 
 async function loadUsage(){
   usage.innerHTML='<div class="state">加载中…</div>';
@@ -439,7 +472,7 @@ async function loadUsage(){
     const data=await response.json();
     if(!data.ok)throw new Error(data.error||'加载失败');
     if(!data.items.length){usage.innerHTML='<div class="state">暂无数据</div>';return;}
-    usage.innerHTML='<table><thead><tr><th>Key</th><th>用量</th><th>状态</th><th>创建时间</th></tr></thead><tbody>'+data.items.map(item=>'<tr><td>'+escapeHtml(item.key)+'</td><td>'+formatNum(item.usage)+'</td><td class="'+statusClass(item.status)+'">'+escapeHtml(item.status)+'</td><td>'+escapeHtml(item.created_at)+'</td></tr>').join('')+'</tbody></table>';
+    usage.innerHTML='<table><thead><tr><th>Key</th><th>用量</th><th>状态</th><th>创建时间</th></tr></thead><tbody>'+data.items.map(item=>'<tr><td>'+escapeHtml(item.key)+'</td><td>'+formatNum(item.usage)+'</td><td>'+badge(item.status)+'</td><td>'+escapeHtml(item.created_at)+'</td></tr>').join('')+'</tbody></table>';
   }catch(error){usage.innerHTML='<div class="state">'+escapeHtml(error.message)+'</div>';}
 }
 
