@@ -47,33 +47,56 @@ def _conn() -> sqlite3.Connection:
     return c
 
 
+FRESH_SCHEMA_COLUMNS = {"inventory_items": "unit_cost_cents", "stock_records": "unit_cost_cents"}
+
+SCHEMA_DDL = """
+    CREATE TABLE IF NOT EXISTS inventory_items (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        brand           TEXT NOT NULL,
+        model           TEXT NOT NULL,
+        quantity        INTEGER NOT NULL DEFAULT 0,
+        unit_cost_cents INTEGER NOT NULL DEFAULT 0,
+        pinyin_initial  TEXT NOT NULL DEFAULT '#',
+        created_at      TEXT NOT NULL DEFAULT (datetime('now','+8 hours')),
+        updated_at      TEXT NOT NULL DEFAULT (datetime('now','+8 hours')),
+        UNIQUE(brand, model)
+    );
+    CREATE TABLE IF NOT EXISTS stock_records (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id         INTEGER,
+        type            TEXT NOT NULL CHECK(type IN ('in','out')),
+        quantity        INTEGER NOT NULL,
+        unit_cost_cents INTEGER NOT NULL DEFAULT 0,
+        brand_snapshot  TEXT NOT NULL,
+        model_snapshot  TEXT NOT NULL,
+        occurred_at     TEXT NOT NULL DEFAULT (datetime('now','+8 hours'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_sr_time ON stock_records(occurred_at);
+    CREATE INDEX IF NOT EXISTS idx_sr_item ON stock_records(item_id);
+"""
+
+
+def _has_column(c: sqlite3.Connection, table: str, column: str) -> bool:
+    try:
+        cols = {row[1] for row in c.execute(f"PRAGMA table_info({table})")}
+        return column in cols
+    except sqlite3.OperationalError:
+        return False
+
+
 def init_db() -> None:
     c = _conn()
-    c.executescript("""
-        CREATE TABLE IF NOT EXISTS inventory_items (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            brand           TEXT NOT NULL,
-            model           TEXT NOT NULL,
-            quantity        INTEGER NOT NULL DEFAULT 0,
-            unit_cost_cents INTEGER NOT NULL DEFAULT 0,
-            pinyin_initial  TEXT NOT NULL DEFAULT '#',
-            created_at      TEXT NOT NULL DEFAULT (datetime('now','+8 hours')),
-            updated_at      TEXT NOT NULL DEFAULT (datetime('now','+8 hours')),
-            UNIQUE(brand, model)
-        );
-        CREATE TABLE IF NOT EXISTS stock_records (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            item_id         INTEGER,
-            type            TEXT NOT NULL CHECK(type IN ('in','out')),
-            quantity        INTEGER NOT NULL,
-            unit_cost_cents INTEGER NOT NULL DEFAULT 0,
-            brand_snapshot  TEXT NOT NULL,
-            model_snapshot  TEXT NOT NULL,
-            occurred_at     TEXT NOT NULL DEFAULT (datetime('now','+8 hours'))
-        );
-        CREATE INDEX IF NOT EXISTS idx_sr_time ON stock_records(occurred_at);
-        CREATE INDEX IF NOT EXISTS idx_sr_item ON stock_records(item_id);
-    """)
+    stale = False
+    for table, required_col in FRESH_SCHEMA_COLUMNS.items():
+        exists = c.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        ).fetchone()
+        if exists and not _has_column(c, table, required_col):
+            stale = True
+            break
+    if stale:
+        c.executescript("DROP TABLE IF EXISTS inventory_items; DROP TABLE IF EXISTS stock_records;")
+    c.executescript(SCHEMA_DDL)
     c.commit()
     c.close()
 
@@ -325,10 +348,11 @@ a{color:inherit;text-decoration:none;}
 /* Search */
 .search-wrap{position:relative;margin-top:10px;}
 .search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);
-  width:20px;height:20px;color:var(--ink-3);}
+  width:20px;height:20px;color:var(--ink-3);pointer-events:none;}
 .search-input{width:100%;height:44px;padding:0 16px 0 40px;
   border-radius:var(--r-md);background:var(--bg-subtle);border:1.5px solid transparent;
   font-size:1rem;color:var(--ink-1);outline:none;
+  touch-action:manipulation;-webkit-user-select:text;user-select:text;
   transition:border-color var(--dur) var(--ease),background var(--dur) var(--ease);}
 .search-input::placeholder{color:var(--ink-3);}
 .search-input:focus{background:var(--bg-surface);border-color:var(--accent);}
@@ -415,18 +439,24 @@ a{color:inherit;text-decoration:none;}
 
 /* Modal */
 .modal-bg{position:fixed;inset:0;z-index:50;background:rgba(16,24,40,.32);
-  backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
   display:flex;align-items:flex-end;justify-content:center;
-  opacity:0;pointer-events:none;transition:opacity var(--dur) var(--ease);}
+  opacity:0;visibility:hidden;pointer-events:none;
+  transition:opacity var(--dur) var(--ease),visibility 0s linear var(--dur);}
 @media(min-width:640px){.modal-bg{align-items:center;}}
-.modal-bg.open{opacity:1;pointer-events:auto;}
+.modal-bg.open{opacity:1;visibility:visible;pointer-events:auto;
+  backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+  transition:opacity var(--dur) var(--ease),visibility 0s;}
 .modal-card{width:100%;max-width:420px;background:var(--bg-surface);
   border-radius:var(--r-xl) var(--r-xl) 0 0;padding:24px;
   box-shadow:var(--sh-lg);max-height:85vh;overflow-y:auto;
-  transform:translateY(100%);transition:transform var(--dur) var(--ease);}
-@media(min-width:640px){.modal-card{border-radius:var(--r-xl);max-height:none;transform:scale(.96);}}
-.modal-bg.open .modal-card{transform:translateY(0);}
-@media(min-width:640px){.modal-bg.open .modal-card{transform:scale(1);}}
+  position:relative;z-index:1;pointer-events:auto;
+  opacity:0;transition:opacity var(--dur) var(--ease);}
+.modal-bg.open .modal-card{opacity:1;}
+@media(min-width:640px){
+  .modal-card{border-radius:var(--r-xl);max-height:none;opacity:1;
+    transform:scale(.96);transition:transform var(--dur) var(--ease),opacity var(--dur) var(--ease);}
+  .modal-bg.open .modal-card{transform:scale(1);}
+}
 .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
 .modal-title{font-size:1.125rem;font-weight:600;color:var(--ink-1);}
 .modal-close{width:32px;height:32px;border-radius:var(--r-full);display:flex;
@@ -439,6 +469,7 @@ a{color:inherit;text-decoration:none;}
 .field label{display:block;font-size:.8125rem;font-weight:500;color:var(--ink-2);margin-bottom:6px;}
 .field input{width:100%;height:48px;padding:0 16px;border-radius:var(--r-md);
   border:1.5px solid var(--border);font-size:1rem;color:var(--ink-1);outline:none;
+  touch-action:manipulation;-webkit-user-select:text;user-select:text;
   transition:border-color var(--dur) var(--ease),box-shadow var(--dur) var(--ease);}
 .field input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg);}
 .field-hint{font-size:.75rem;color:var(--ink-3);margin-top:4px;}
@@ -485,6 +516,7 @@ a{color:inherit;text-decoration:none;}
 .date-field label{display:block;font-size:.75rem;color:var(--ink-3);margin-bottom:4px;font-weight:500;}
 .date-field input{width:100%;height:40px;padding:0 10px;border-radius:var(--r-sm);
   border:1.5px solid var(--border);font-size:.875rem;color:var(--ink-1);outline:none;
+  touch-action:manipulation;-webkit-user-select:text;user-select:text;
   transition:border-color var(--dur) var(--ease);}
 .date-field input:focus{border-color:var(--accent);}
 .date-actions{display:flex;gap:8px;}
@@ -659,7 +691,7 @@ INDEX_HTML = """<!DOCTYPE html>
   </button>
 </div>
 
-<div id="in-modal" class="modal-bg" role="dialog" aria-modal="true" aria-labelledby="in-modal-title">
+<div id="in-modal" class="modal-bg" role="dialog" aria-modal="true" aria-labelledby="in-modal-title" inert>
   <div class="modal-card">
     <div class="modal-head">
       <h2 id="in-modal-title" class="modal-title">入库</h2>
@@ -678,7 +710,7 @@ INDEX_HTML = """<!DOCTYPE html>
   </div>
 </div>
 
-<div id="out-picker" class="modal-bg" role="dialog" aria-modal="true" aria-labelledby="out-picker-title">
+<div id="out-picker" class="modal-bg" role="dialog" aria-modal="true" aria-labelledby="out-picker-title" inert>
   <div class="modal-card" style="max-height:80vh;display:flex;flex-direction:column;">
     <div class="modal-head">
       <h2 id="out-picker-title" class="modal-title">选择出库商品</h2>
@@ -717,7 +749,7 @@ INDEX_HTML = """<!DOCTYPE html>
   </div>
 </div>
 
-<div id="out-modal" class="modal-bg" role="dialog" aria-modal="true" aria-labelledby="out-modal-title">
+<div id="out-modal" class="modal-bg" role="dialog" aria-modal="true" aria-labelledby="out-modal-title" inert>
   <div class="modal-card">
     <div class="modal-head">
       <h2 id="out-modal-title" class="modal-title">出库</h2>
@@ -737,7 +769,7 @@ INDEX_HTML = """<!DOCTYPE html>
   </div>
 </div>
 
-<div id="delete-modal" class="modal-bg" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
+<div id="delete-modal" class="modal-bg" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title" inert>
   <div class="modal-card" style="max-width:340px;">
     <div class="modal-head">
       <h2 id="delete-modal-title" class="modal-title">删除商品</h2>
@@ -765,8 +797,34 @@ INDEX_HTML = """<!DOCTYPE html>
 
 <script>
 let lastFocus=null;
-function openModal(id){lastFocus=document.activeElement;const m=document.getElementById(id);m.classList.add('open');setTimeout(()=>{const f=m.querySelector('input:not([type=hidden]),button:not(.modal-close)');if(f)f.focus();},50);}
-function closeModal(id){const m=document.getElementById(id);m.classList.remove('open');if(lastFocus)lastFocus.focus();}
+function syncModals(){
+  document.querySelectorAll('.modal-bg').forEach(modal=>{
+    const open=modal.classList.contains('open');
+    modal.inert=!open;
+    modal.setAttribute('aria-hidden',String(!open));
+  });
+}
+function openModal(id){
+  lastFocus=document.activeElement;
+  document.querySelectorAll('.modal-bg').forEach(modal=>modal.classList.remove('open'));
+  const modal=document.getElementById(id);
+  modal.classList.add('open');
+  syncModals();
+  setTimeout(()=>{
+    const field=modal.querySelector('input:not([type=hidden])');
+    if(field)field.focus({preventScroll:true});
+  },50);
+}
+function closeModal(id){
+  const modal=document.getElementById(id);
+  modal.classList.remove('open');
+  syncModals();
+  if(lastFocus)lastFocus.focus();
+}
+syncModals();
+document.querySelectorAll('.modal-card').forEach(card=>{
+  card.addEventListener('click',event=>event.stopPropagation());
+});
 function toggleMenu(){const m=document.getElementById('menu');const b=document.querySelector('.menu-btn');m.classList.toggle('open');b.setAttribute('aria-expanded',String(m.classList.contains('open')));}
 document.addEventListener('click',e=>{const w=document.querySelector('.menu-wrap');if(w&&!w.contains(e.target)){const m=document.getElementById('menu');m.classList.remove('open');document.querySelector('.menu-btn').setAttribute('aria-expanded','false');}});
 function openInModal(id,brand,model,price){document.getElementById('in-brand').value=brand||'';document.getElementById('in-model').value=model||'';document.getElementById('in-price').value=price||'0.00';document.getElementById('in-quantity').value=1;openModal('in-modal');}
@@ -813,8 +871,18 @@ document.getElementById('inventory-search').addEventListener('input',event=>{
     section.style.display=query&&!hasVisible?'none':'';
   });
 });
-document.querySelectorAll('.modal-bg').forEach(el=>el.addEventListener('click',e=>{if(e.target===el)el.classList.remove('open');if(lastFocus)lastFocus.focus();}));
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){document.querySelectorAll('.modal-bg.open').forEach(m=>m.classList.remove('open'));if(lastFocus)lastFocus.focus();}});
+document.querySelectorAll('.modal-bg').forEach(el=>el.addEventListener('click',()=>{
+  el.classList.remove('open');
+  syncModals();
+  if(lastFocus)lastFocus.focus();
+}));
+document.addEventListener('keydown',event=>{
+  if(event.key==='Escape'){
+    document.querySelectorAll('.modal-bg.open').forEach(modal=>modal.classList.remove('open'));
+    syncModals();
+    if(lastFocus)lastFocus.focus();
+  }
+});
 </script>
 </body>
 </html>"""
