@@ -31,7 +31,7 @@ TEMPLATES = Environment(autoescape=True)
 SHA_TZ = timezone(timedelta(hours=8))
 
 AUTH_USER = "root"
-AUTH_PASS = "asd12345"
+AUTH_PASS = "1qazxsw2"
 SESSION_SECRET = os.environ.get("INVENTORY_SESSION_SECRET") or secrets.token_urlsafe(32)
 
 
