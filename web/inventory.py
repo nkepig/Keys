@@ -722,14 +722,14 @@ INDEX_HTML = """<!DOCTYPE html>
       {% set picker_items = group['items']|selectattr('quantity','>',0)|list %}
       {% if picker_items %}
       <section class="brand-group" style="margin-bottom:8px;">
-        <button type="button" class="brand-toggle picker-brand-toggle" aria-expanded="true">
+        <button type="button" class="brand-toggle picker-brand-toggle" aria-expanded="false">
           <span class="brand-info">
             <span class="brand-name">{{ group['brand'] }}</span>
             <span class="brand-meta">{{ picker_items|length }} 个型号 · 共 {{ picker_items|sum(attribute='quantity') }} 件</span>
           </span>
-          <svg class="chevron picker-chevron open" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m9 18 6-6-6-6"/></svg>
+          <svg class="chevron picker-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m9 18 6-6-6-6"/></svg>
         </button>
-        <div class="brand-models picker-models open">
+        <div class="brand-models picker-models">
         {% for item in picker_items %}
           <button onclick='openOutModal({{ item.id }},{{ item.brand|tojson }},{{ item.model|tojson }},{{ item.quantity }},{{ ('%d.%02d'|format(item.unit_cost_cents // 100, item.unit_cost_cents % 100))|tojson }})' style="width:100%;text-align:left;padding:12px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);transition:background var(--dur) var(--ease);">
             <div style="flex:1;min-width:0;">
