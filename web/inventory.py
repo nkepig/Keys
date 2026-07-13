@@ -198,6 +198,70 @@ def delete_item(item_id: int) -> None:
     c.close()
 
 
+def update_item(
+    item_id: int,
+    brand: str,
+    model: str,
+    quantity: int,
+    price_cents: int,
+    pinyin_initial: str,
+) -> dict:
+    """Directly update item fields. Does not write stock_records."""
+    c = _conn()
+    item = c.execute("SELECT * FROM inventory_items WHERE id=?", (item_id,)).fetchone()
+    if not item:
+        c.close()
+        raise ValueError("Item not found")
+    conflict = c.execute(
+        "SELECT id FROM inventory_items WHERE brand=? AND model=? AND id!=?",
+        (brand, model, item_id),
+    ).fetchone()
+    if conflict:
+        c.close()
+        raise ValueError("duplicate")
+    c.execute(
+        "UPDATE inventory_items SET brand=?, model=?, quantity=?, unit_cost_cents=?, "
+        "pinyin_initial=?, updated_at=datetime('now','+8 hours') WHERE id=?",
+        (brand, model, quantity, price_cents, pinyin_initial, item_id),
+    )
+    c.commit()
+    result = dict(c.execute(
+        "SELECT * FROM inventory_items WHERE id=?", (item_id,)
+    ).fetchone())
+    c.close()
+    return result
+
+
+def rename_brand(old_brand: str, new_brand: str) -> int:
+    """Rename a brand for all its items. Raises ValueError('duplicate') on model conflict."""
+    if old_brand == new_brand:
+        return 0
+    c = _conn()
+    items = c.execute(
+        "SELECT id, model FROM inventory_items WHERE brand=?", (old_brand,)
+    ).fetchall()
+    if not items:
+        c.close()
+        raise ValueError("missing")
+    for item in items:
+        conflict = c.execute(
+            "SELECT id FROM inventory_items WHERE brand=? AND model=? AND id!=?",
+            (new_brand, item["model"], item["id"]),
+        ).fetchone()
+        if conflict:
+            c.close()
+            raise ValueError("duplicate")
+    for item in items:
+        c.execute(
+            "UPDATE inventory_items SET brand=?, pinyin_initial=?, "
+            "updated_at=datetime('now','+8 hours') WHERE id=?",
+            (new_brand, pinyin_initial(new_brand + item["model"]), item["id"]),
+        )
+    c.commit()
+    c.close()
+    return len(items)
+
+
 def get_stock_history(start: date, end: date) -> list[dict]:
     """Return records in [start 00:00, end+1day 00:00) half-open range (Asia/Shanghai)."""
     c = _conn()
@@ -358,7 +422,13 @@ a{color:inherit;text-decoration:none;}
 .search-input:focus{background:var(--bg-surface);border-color:var(--accent);}
 
 /* Main */
-.main{max-width:720px;margin:0 auto;padding:8px 20px 120px;}
+.main{max-width:720px;margin:0 auto;padding:8px 20px calc(120px + env(safe-area-inset-bottom,0px));}
+.inventory-layout{display:flex;gap:8px;}
+.inventory-list{flex:1;min-width:0;padding-right:4px;}
+.initial-section{padding-top:16px;}
+.initial-section:first-child{padding-top:8px;}
+.initial-label{font-size:.6875rem;font-weight:700;letter-spacing:.06em;color:var(--ink-3);
+  padding:0 4px 8px;text-transform:uppercase;}
 
 /* Empty state */
 .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -370,45 +440,53 @@ a{color:inherit;text-decoration:none;}
 .empty-hint{font-size:.8125rem;color:var(--ink-4);margin-top:4px;}
 
 /* Alphabet bar */
-.alpha-bar{position:fixed;right:4px;top:50%;transform:translateY(-50%);
-  display:flex;flex-direction:column;gap:1px;user-select:none;z-index:20;
-  max-height:70vh;overflow-y:auto;scrollbar-width:none;}
+.alpha-bar{position:fixed;right:max(2px, env(safe-area-inset-right,0px));top:50%;transform:translateY(-50%);
+  display:flex;flex-direction:column;gap:0;user-select:none;z-index:20;
+  max-height:70vh;overflow-y:auto;scrollbar-width:none;
+  padding:6px 2px;border-radius:var(--r-full);background:rgba(255,255,255,.72);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid var(--border);}
 .alpha-bar::-webkit-scrollbar{display:none;}
-.alpha-link{width:24px;height:20px;display:flex;align-items:center;justify-content:center;
-  font-size:10px;font-weight:600;color:var(--ink-2);border-radius:4px;
-  transition:background var(--dur) var(--ease);text-decoration:none;}
-.alpha-link:hover{background:var(--bg-subtle);}
+.alpha-link{width:22px;height:18px;display:flex;align-items:center;justify-content:center;
+  font-size:9px;font-weight:700;color:var(--ink-2);border-radius:4px;
+  transition:background var(--dur) var(--ease),color var(--dur) var(--ease);text-decoration:none;}
+.alpha-link:hover{background:var(--accent-bg);color:var(--accent);}
 .alpha-link.off{color:var(--ink-4);pointer-events:none;}
-@media(max-width:380px){.alpha-bar{display:none;}}
+@media(max-width:380px){.alpha-bar{display:none;}.inventory-list{padding-right:0;}}
 
 /* Brand group */
 .brand-group{margin-bottom:8px;background:var(--bg-surface);
   border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;}
-.brand-toggle{width:100%;min-height:52px;padding:12px 16px;display:flex;
-  align-items:center;justify-content:flex-start;gap:12px;text-align:left;
-  transition:background var(--dur) var(--ease);}
-.brand-toggle:hover{background:var(--bg-subtle);}
+.brand-header{display:flex;align-items:center;gap:2px;padding-right:6px;}
+.brand-header:hover{background:var(--bg-subtle);}
+.brand-toggle{flex:1;min-width:0;min-height:52px;padding:12px 8px 12px 16px;display:flex;
+  align-items:center;justify-content:flex-start;gap:12px;text-align:left;}
+.brand-toggle:hover{background:transparent;}
 .brand-info{flex:1;min-width:0;}
-.brand-name{display:block;font-weight:600;font-size:.9375rem;color:var(--ink-1);}
+.brand-name{display:block;font-weight:650;font-size:1rem;color:var(--ink-1);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .brand-meta{display:block;font-size:.75rem;color:var(--ink-3);margin-top:2px;}
-.chevron{width:20px;height:20px;color:var(--ink-3);flex-shrink:0;
+.chevron{width:18px;height:18px;color:var(--ink-3);flex-shrink:0;
   transition:transform var(--dur) var(--ease);}
 .chevron.open{transform:rotate(90deg);}
 .brand-models{border-top:1px solid var(--border);display:none;}
 .brand-models.open{display:block;}
+.brand-rename{flex-shrink:0;width:36px;height:36px;opacity:.55;}
+.brand-rename:hover{opacity:1;}
 
 /* Model row */
-.model-row{padding:12px 16px;display:flex;align-items:center;gap:12px;
+.model-row{padding:12px 12px 12px 16px;display:flex;align-items:center;gap:10px;
   border-bottom:1px solid var(--border);transition:background var(--dur) var(--ease);}
 .model-row:last-child{border-bottom:none;}
 .model-row:hover{background:var(--bg-subtle);}
-.model-row.empty-stock{opacity:.4;}
+.model-row.empty-stock{background:linear-gradient(90deg,rgba(229,72,77,.04),transparent 40%);}
 .model-info{flex:1;min-width:0;}
-.model-name{font-weight:500;font-size:.875rem;color:var(--ink-1);
+.model-name{font-weight:600;font-size:.9375rem;color:var(--ink-1);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.model-qty{font-size:.75rem;color:var(--ink-3);margin-top:2px;}
-.model-price{font-size:.75rem;color:var(--ink-2);margin-top:1px;}
-.model-actions{display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:8px;}
+.model-meta{display:flex;align-items:baseline;flex-wrap:wrap;gap:8px;margin-top:4px;}
+.model-qty{font-size:.8125rem;font-weight:700;font-variant-numeric:tabular-nums;color:var(--accent);}
+.model-qty.zero{color:var(--red);font-weight:600;}
+.model-price{font-size:.75rem;font-variant-numeric:tabular-nums;color:var(--ink-3);}
+.model-actions{display:flex;align-items:center;gap:4px;flex-shrink:0;}
 .icon-btn{width:40px;height:40px;border-radius:var(--r-full);display:flex;
   align-items:center;justify-content:center;transition:all var(--dur) var(--ease);
   border:none;}
@@ -417,22 +495,30 @@ a{color:inherit;text-decoration:none;}
 .icon-btn.out:hover{background:var(--blue);color:#fff;}
 .icon-btn.in{background:var(--accent-bg);color:var(--accent);}
 .icon-btn.in:hover{background:var(--accent);color:#fff;}
-.icon-btn.del{background:var(--bg-subtle);color:var(--ink-3);}
+.icon-btn.edit,.icon-btn.del{width:34px;height:34px;background:transparent;color:var(--ink-3);}
+.icon-btn.edit svg,.icon-btn.del svg{width:16px;height:16px;}
+.icon-btn.edit:hover{background:var(--bg-subtle);color:var(--ink-1);}
 .icon-btn.del:hover{background:var(--red-bg);color:var(--red);}
 .icon-btn.off{opacity:.3;pointer-events:none;}
+@media(max-width:420px){
+  .model-actions{gap:2px;}
+  .icon-btn.out,.icon-btn.in{width:36px;height:36px;}
+  .icon-btn.edit,.icon-btn.del{width:32px;height:32px;}
+}
 
 /* Capsule */
-.capsule{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:30;
-  display:flex;width:192px;height:56px;border-radius:var(--r-full);
+.capsule{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom,0px));left:50%;
+  transform:translateX(-50%);z-index:30;
+  display:flex;width:min(220px, calc(100vw - 48px));height:56px;border-radius:var(--r-full);
   background:var(--bg-surface);border:1px solid var(--border);
   box-shadow:var(--sh-lg);overflow:hidden;}
 .capsule-half{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;
-  font-size:.875rem;font-weight:500;color:var(--ink-1);transition:all var(--dur) var(--ease);}
+  font-size:.875rem;font-weight:600;color:var(--ink-1);transition:all var(--dur) var(--ease);}
 .capsule-half:first-child{background:var(--accent-bg);border-radius:var(--r-full) 0 0 var(--r-full);}
 .capsule-half:last-child{background:var(--blue-bg);border-radius:0 var(--r-full) var(--r-full) 0;}
-.capsule-half:hover{filter:brightness(.95);}
+.capsule-half:hover{filter:brightness(.96);}
 .capsule-half:active{transform:scale(.96);}
-.capsule-half .sign{font-size:1.125rem;font-weight:700;}
+.capsule-half .sign{font-size:1.125rem;font-weight:700;line-height:1;}
 .capsule-half:first-child .sign{color:var(--accent);}
 .capsule-half:last-child .sign{color:var(--blue);}
 .capsule-half.off{opacity:.4;pointer-events:none;}
@@ -447,19 +533,27 @@ a{color:inherit;text-decoration:none;}
   backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
   transition:opacity var(--dur) var(--ease),visibility 0s;}
 .modal-card{width:100%;max-width:420px;background:var(--bg-surface);
-  border-radius:var(--r-xl) var(--r-xl) 0 0;padding:24px;
+  border-radius:var(--r-xl) var(--r-xl) 0 0;padding:24px 24px calc(24px + env(safe-area-inset-bottom,0px));
   box-shadow:var(--sh-lg);max-height:85vh;overflow-y:auto;
   position:relative;z-index:1;pointer-events:auto;
   opacity:0;transition:opacity var(--dur) var(--ease);}
 .modal-bg.open .modal-card{opacity:1;}
 @media(min-width:640px){
-  .modal-card{border-radius:var(--r-xl);max-height:none;opacity:1;
+  .modal-card{border-radius:var(--r-xl);max-height:none;opacity:1;padding:24px;
     transform:scale(.96);transition:transform var(--dur) var(--ease),opacity var(--dur) var(--ease);}
   .modal-bg.open .modal-card{transform:scale(1);}
 }
+.modal-card.picker{max-height:80vh;display:flex;flex-direction:column;padding-bottom:12px;}
+.modal-card.picker .picker-list{overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch;}
+.picker-item{width:100%;text-align:left;padding:12px 16px;display:flex;align-items:center;gap:12px;
+  border-bottom:1px solid var(--border);transition:background var(--dur) var(--ease);}
+.picker-item:hover{background:var(--bg-subtle);}
+.picker-item:last-child{border-bottom:none;}
+.picker-item-body{flex:1;min-width:0;}
+.picker-item-arrow{width:18px;height:18px;color:var(--blue);flex-shrink:0;}
 .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
-.modal-title{font-size:1.125rem;font-weight:600;color:var(--ink-1);}
-.modal-close{width:32px;height:32px;border-radius:var(--r-full);display:flex;
+.modal-title{font-size:1.125rem;font-weight:650;color:var(--ink-1);}
+.modal-close{width:36px;height:36px;border-radius:var(--r-full);display:flex;
   align-items:center;justify-content:center;transition:background var(--dur) var(--ease);}
 .modal-close:hover{background:var(--bg-subtle);}
 .modal-close svg{width:20px;height:20px;color:var(--ink-3);}
@@ -487,9 +581,10 @@ a{color:inherit;text-decoration:none;}
 .btn-submit.red:hover{background:#C73E42;}
 
 /* Item card in modal */
-.item-card{padding:12px 16px;background:var(--bg-subtle);border-radius:var(--r-md);margin-bottom:16px;}
-.item-card-name{font-weight:500;font-size:.875rem;color:var(--ink-1);}
-.item-card-row{font-size:.75rem;color:var(--ink-3);margin-top:2px;}
+.item-card{padding:14px 16px;background:var(--bg-subtle);border-radius:var(--r-md);margin-bottom:16px;}
+.item-card-name{font-weight:650;font-size:.9375rem;color:var(--ink-1);}
+.item-card-row{font-size:.8125rem;color:var(--ink-3);margin-top:4px;font-variant-numeric:tabular-nums;}
+.item-card-row strong{color:var(--accent);font-weight:700;}
 
 /* Delete modal */
 .del-body{font-size:.875rem;color:var(--ink-2);margin-bottom:20px;line-height:1.6;}
@@ -634,31 +729,37 @@ INDEX_HTML = """<!DOCTYPE html>
     <p class="empty-hint">点击下方「入库」添加</p>
   </div>
 {% else %}
-  <div style="display:flex;gap:12px;">
-    <div style="flex:1;">
+  <div class="inventory-layout">
+    <div class="inventory-list">
     {% for initial in sorted_initials %}
-      <div id="section-{{ initial }}" class="initial-section" data-initial="{{ initial }}" style="padding-top:12px;">
-        <div style="font-size:.75rem;font-weight:600;color:var(--ink-3);padding:0 4px 8px;">{{ initial }}</div>
+      <div id="section-{{ initial }}" class="initial-section" data-initial="{{ initial }}">
+        <div class="initial-label">{{ initial }}</div>
         {% for group in groups.get(initial, []) %}
         <section class="brand-group" data-brand-group data-brand="{{ group['brand']|lower }}">
-          <button type="button" class="brand-toggle" aria-expanded="false">
-            <span class="brand-info">
-              <span class="brand-name">{{ group['brand'] }}</span>
-              <span class="brand-meta">{{ group['items']|length }} 个型号 · 共 {{ group['total_quantity'] }} 件</span>
-            </span>
-            <svg class="chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m9 18 6-6-6-6"/></svg>
-          </button>
+          <div class="brand-header">
+            <button type="button" class="brand-toggle" aria-expanded="false">
+              <span class="brand-info">
+                <span class="brand-name">{{ group['brand'] }}</span>
+                <span class="brand-meta">{{ group['items']|length }} 个型号 · 共 {{ group['total_quantity'] }} 件</span>
+              </span>
+              <svg class="chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m9 18 6-6-6-6"/></svg>
+            </button>
+            <button type="button" class="icon-btn edit brand-rename" aria-label="重命名品牌 {{ group['brand'] }}" onclick='openRenameBrandModal({{ group['brand']|tojson }})'><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M4 20h4.586a1 1 0 00.707-.293l9.414-9.414a2 2 0 000-2.828l-2.172-2.172a2 2 0 00-2.828 0L4.293 14.707A1 1 0 004 15.414V20z"/></svg></button>
+          </div>
           <div class="brand-models">
           {% for item in group['items'] %}
             <div class="model-row {{ 'empty-stock' if item.quantity == 0 else '' }}" data-search="{{ (item.brand ~ ' ' ~ item.model)|lower }}">
               <div class="model-info">
                 <div class="model-name">{{ item.model }}</div>
-                <div class="model-qty">数量：{{ item.quantity }}</div>
-                <div class="model-price">进价：¥{{ '%d.%02d'|format(item.unit_cost_cents // 100, item.unit_cost_cents % 100) }}</div>
+                <div class="model-meta">
+                  <span class="model-qty {{ 'zero' if item.quantity == 0 else '' }}">{% if item.quantity == 0 %}缺货{% else %}{{ item.quantity }} 件{% endif %}</span>
+                  <span class="model-price">¥{{ '%d.%02d'|format(item.unit_cost_cents // 100, item.unit_cost_cents % 100) }}</span>
+                </div>
               </div>
               <div class="model-actions">
                 <button class="icon-btn out {{ 'off' if item.quantity == 0 else '' }}" aria-label="出库 {{ item.brand }} {{ item.model }}" onclick='openOutModal({{ item.id }},{{ item.brand|tojson }},{{ item.model|tojson }},{{ item.quantity }},{{ ('%d.%02d'|format(item.unit_cost_cents // 100, item.unit_cost_cents % 100))|tojson }})'><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 12h14"/></svg></button>
                 <button class="icon-btn in" aria-label="入库 {{ item.brand }} {{ item.model }}" onclick='openInModal({{ item.id }},{{ item.brand|tojson }},{{ item.model|tojson }},{{ ('%d.%02d'|format(item.unit_cost_cents // 100, item.unit_cost_cents % 100))|tojson }})'><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 5v14M5 12h14"/></svg></button>
+                <button class="icon-btn edit" aria-label="编辑 {{ item.brand }} {{ item.model }}" onclick='openEditModal({{ item.id }},{{ item.brand|tojson }},{{ item.model|tojson }},{{ item.quantity }},{{ ('%d.%02d'|format(item.unit_cost_cents // 100, item.unit_cost_cents % 100))|tojson }})'><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M4 20h4.586a1 1 0 00.707-.293l9.414-9.414a2 2 0 000-2.828l-2.172-2.172a2 2 0 00-2.828 0L4.293 14.707A1 1 0 004 15.414V20z"/></svg></button>
                 <button class="icon-btn del" aria-label="删除 {{ item.brand }} {{ item.model }}" onclick='deleteItem({{ item.id }},{{ item.brand|tojson }},{{ item.model|tojson }})'><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/></svg></button>
               </div>
             </div>
@@ -711,12 +812,12 @@ INDEX_HTML = """<!DOCTYPE html>
 </div>
 
 <div id="out-picker" class="modal-bg" role="dialog" aria-modal="true" aria-labelledby="out-picker-title" inert>
-  <div class="modal-card" style="max-height:80vh;display:flex;flex-direction:column;">
+  <div class="modal-card picker">
     <div class="modal-head">
       <h2 id="out-picker-title" class="modal-title">选择出库商品</h2>
       <button class="modal-close" onclick="closeOutPicker()" aria-label="关闭"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
     </div>
-    <div style="overflow-y:auto;flex:1;">
+    <div class="picker-list">
     {% for initial in sorted_initials %}
       {% for group in groups.get(initial, []) %}
       {% set picker_items = group['items']|selectattr('quantity','>',0)|list %}
@@ -731,13 +832,15 @@ INDEX_HTML = """<!DOCTYPE html>
         </button>
         <div class="brand-models picker-models">
         {% for item in picker_items %}
-          <button onclick='openOutModal({{ item.id }},{{ item.brand|tojson }},{{ item.model|tojson }},{{ item.quantity }},{{ ('%d.%02d'|format(item.unit_cost_cents // 100, item.unit_cost_cents % 100))|tojson }})' style="width:100%;text-align:left;padding:12px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);transition:background var(--dur) var(--ease);">
-            <div style="flex:1;min-width:0;">
+          <button type="button" class="picker-item" onclick='openOutModal({{ item.id }},{{ item.brand|tojson }},{{ item.model|tojson }},{{ item.quantity }},{{ ('%d.%02d'|format(item.unit_cost_cents // 100, item.unit_cost_cents % 100))|tojson }})'>
+            <div class="picker-item-body">
               <div class="model-name">{{ item.model }}</div>
-              <div class="model-qty">数量：{{ item.quantity }}</div>
-              <div class="model-price">进价：¥{{ '%d.%02d'|format(item.unit_cost_cents // 100, item.unit_cost_cents % 100) }}</div>
+              <div class="model-meta">
+                <span class="model-qty">{{ item.quantity }} 件</span>
+                <span class="model-price">¥{{ '%d.%02d'|format(item.unit_cost_cents // 100, item.unit_cost_cents % 100) }}</span>
+              </div>
             </div>
-            <svg style="width:18px;height:18px;color:var(--blue);flex-shrink:0;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 12h14"/></svg>
+            <svg class="picker-item-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 12h14"/></svg>
           </button>
         {% endfor %}
         </div>
@@ -757,14 +860,48 @@ INDEX_HTML = """<!DOCTYPE html>
     </div>
     <div class="item-card">
       <div class="item-card-name" id="out-item-name">—</div>
-      <div class="item-card-row">数量：<span id="out-item-qty">0</span></div>
-      <div class="item-card-row">进价：¥<span id="out-item-price">0.00</span></div>
+      <div class="item-card-row">库存 <strong id="out-item-qty">0</strong> 件 · 进价 ¥<span id="out-item-price">0.00</span></div>
     </div>
     <form id="out-form" action="/stock-out" method="POST">
       <input type="hidden" name="item_id" id="out-item-id">
       <div class="field"><label for="out-quantity">出库数量</label><input name="quantity" id="out-quantity" type="number" min="1" value="1" required></div>
       <p class="field-hint">超出库存的数量会自动截断</p>
       <button type="submit" class="btn-submit blue">确认出库</button>
+    </form>
+  </div>
+</div>
+
+<div id="edit-modal" class="modal-bg" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title" inert>
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2 id="edit-modal-title" class="modal-title">编辑商品</h2>
+      <button class="modal-close" onclick="closeEditModal()" aria-label="关闭"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+    </div>
+    <form action="/edit" method="POST">
+      <input type="hidden" name="item_id" id="edit-item-id">
+      <div class="field"><label for="edit-brand">品牌</label><input name="brand" id="edit-brand" type="text" required placeholder="例：倍耐力"></div>
+      <div class="field"><label for="edit-model">型号</label><input name="model" id="edit-model" type="text" required placeholder="例：26540R22"></div>
+      <div class="field-group">
+        <div class="field"><label for="edit-quantity">数量</label><input name="quantity" id="edit-quantity" type="number" min="0" value="0" required></div>
+        <div class="field"><label for="edit-price">进价（元）</label><input name="price" id="edit-price" type="number" min="0" step="0.01" value="0.00" inputmode="decimal" required></div>
+      </div>
+      <p class="field-hint">直接修改当前库存信息，不会写入出入库历史</p>
+      <button type="submit" class="btn-submit blue">保存修改</button>
+    </form>
+  </div>
+</div>
+
+<div id="rename-brand-modal" class="modal-bg" role="dialog" aria-modal="true" aria-labelledby="rename-brand-modal-title" inert>
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2 id="rename-brand-modal-title" class="modal-title">重命名品牌</h2>
+      <button class="modal-close" onclick="closeRenameBrandModal()" aria-label="关闭"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+    </div>
+    <form action="/rename-brand" method="POST">
+      <input type="hidden" name="old_brand" id="rename-old-brand">
+      <div class="field"><label for="rename-new-brand">品牌名称</label><input name="new_brand" id="rename-new-brand" type="text" required placeholder="例：倍耐力"></div>
+      <p class="field-hint">将更新该品牌下全部型号，不会写入出入库历史</p>
+      <button type="submit" class="btn-submit blue">保存</button>
     </form>
   </div>
 </div>
@@ -785,12 +922,18 @@ INDEX_HTML = """<!DOCTYPE html>
 
 {% if qp.get('added') %}
 <div class="toast">入库成功</div>
+{% elif qp.get('edited') %}
+<div class="toast">已保存修改</div>
+{% elif qp.get('renamed') %}
+<div class="toast">品牌已重命名</div>
 {% elif qp.get('out') and qp.get('qty') %}
 <div class="toast"><span>已出库 {{ qp.get('qty') }} 件</span><form action="/stock-out/undo" method="POST"><input type="hidden" name="item_id" value="{{ qp.get('out') }}"><input type="hidden" name="quantity" value="{{ qp.get('qty') }}"><button type="submit">撤销</button></form></div>
 {% elif qp.get('undone') %}
 <div class="toast">已撤销出库</div>
 {% elif qp.get('deleted') %}
 <div class="toast">已删除</div>
+{% elif qp.get('error') == 'duplicate' %}
+<div class="toast error">品牌+型号已存在，无法保存</div>
 {% elif qp.get('error') %}
 <div class="toast error">输入有误，请检查</div>
 {% endif %}
@@ -833,10 +976,26 @@ function openOutPicker(){openModal('out-picker');}
 function closeOutPicker(){closeModal('out-picker');}
 function openOutModal(id,brand,model,qty,price){document.getElementById('out-item-id').value=id;document.getElementById('out-item-name').textContent=brand+' · '+model;document.getElementById('out-item-qty').textContent=qty;document.getElementById('out-item-price').textContent=price;const q=document.getElementById('out-quantity');q.value=1;q.max=qty;closeOutPicker();openModal('out-modal');}
 function closeOutModal(){closeModal('out-modal');}
+function openEditModal(id,brand,model,qty,price){
+  document.getElementById('edit-item-id').value=id;
+  document.getElementById('edit-brand').value=brand||'';
+  document.getElementById('edit-model').value=model||'';
+  document.getElementById('edit-quantity').value=qty??0;
+  document.getElementById('edit-price').value=price||'0.00';
+  openModal('edit-modal');
+}
+function closeEditModal(){closeModal('edit-modal');}
+function openRenameBrandModal(brand){
+  document.getElementById('rename-old-brand').value=brand||'';
+  document.getElementById('rename-new-brand').value=brand||'';
+  openModal('rename-brand-modal');
+}
+function closeRenameBrandModal(){closeModal('rename-brand-modal');}
 function deleteItem(id,brand,model){document.getElementById('delete-desc').textContent='确定删除「'+brand+' · '+model+'」吗？历史记录将保留。';document.getElementById('delete-form').action='/delete/'+id;openModal('delete-modal');}
 function closeDeleteModal(){closeModal('delete-modal');}
 function toggleBrandGroup(button){
-  const models=button.nextElementSibling;
+  const group=button.closest('.brand-group');
+  const models=group?group.querySelector('.brand-models'):button.nextElementSibling;
   if(!models)return;
   const expanded=button.getAttribute('aria-expanded')==='true';
   button.setAttribute('aria-expanded',String(!expanded));
@@ -1174,6 +1333,53 @@ def stock_out_undo(item_id: int = Form(...), quantity: int = Form(...)):
         item["brand"], item["model"], quantity, item["pinyin_initial"], None
     )
     return RedirectResponse(url="/?undone=1", status_code=303)
+
+
+@app.post("/edit")
+def edit_item(
+    item_id: int = Form(...),
+    brand: str = Form(...),
+    model: str = Form(...),
+    quantity: int = Form(...),
+    price: str = Form(...),
+):
+    brand, model = brand.strip(), model.strip()
+    price_cents = parse_price_cents(price)
+    if not brand or not model or quantity < 0 or price_cents is None:
+        return RedirectResponse(url="/?error=invalid", status_code=303)
+    try:
+        update_item(
+            item_id,
+            brand,
+            model,
+            quantity,
+            price_cents,
+            pinyin_initial(brand + model),
+        )
+    except ValueError as e:
+        if str(e) == "duplicate":
+            return RedirectResponse(url="/?error=duplicate", status_code=303)
+        return RedirectResponse(url="/?error=missing", status_code=303)
+    return RedirectResponse(url="/?edited=1", status_code=303)
+
+
+@app.post("/rename-brand")
+def rename_brand_route(
+    old_brand: str = Form(...),
+    new_brand: str = Form(...),
+):
+    old_brand, new_brand = old_brand.strip(), new_brand.strip()
+    if not old_brand or not new_brand:
+        return RedirectResponse(url="/?error=invalid", status_code=303)
+    if old_brand == new_brand:
+        return RedirectResponse(url="/", status_code=303)
+    try:
+        rename_brand(old_brand, new_brand)
+    except ValueError as e:
+        if str(e) == "duplicate":
+            return RedirectResponse(url="/?error=duplicate", status_code=303)
+        return RedirectResponse(url="/?error=missing", status_code=303)
+    return RedirectResponse(url="/?renamed=1", status_code=303)
 
 
 @app.post("/delete/{item_id}")
