@@ -1,17 +1,25 @@
 from __future__ import annotations
 
 import anyio
+import hmac
 import os
+import secrets
 from datetime import datetime
 from typing import Any, Final
 
 import httpx
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict
+from starlette.middleware.sessions import SessionMiddleware
 
 API_KEY: Final = os.environ.get(
     "MSK_API_KEY", "msk_live_8499a96e4561ad3aa2b63ba3cc5a61505107db5a74a06a1b"
+)
+USERNAME: Final = os.environ.get("KEY_APP_USER", "root")
+PASSWORD: Final = os.environ.get("KEY_APP_PASS", "asd12345")
+SESSION_SECRET: Final = os.environ.get(
+    "KEY_APP_SECRET", "k7m2x9q4z8r1v6t3y0w5a8b2c6d4e7f9"
 )
 BASE_URL: Final = "https://gys.oljjio.click/openapi/v1"
 CATEGORIES: Final = {
@@ -203,9 +211,51 @@ async def fetch_usage() -> dict[str, Any]:
 
 app = FastAPI(title="Key Usage")
 
+OPEN_PATHS = {"/login", "/logout"}
+
+
+@app.middleware("http")
+async def require_login(request: Request, call_next):
+    path = request.url.path
+    if path in OPEN_PATHS or path.startswith("/login"):
+        return await call_next(request)
+    if not request.session.get("authed"):
+        if path.startswith("/api/"):
+            return JSONResponse({"ok": False, "error": "未登录"}, status_code=401)
+        return RedirectResponse("/login", status_code=302)
+    return await call_next(request)
+
+
+app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET, same_site="lax")
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page() -> str:
+    return LOGIN_PAGE
+
+
+@app.post("/login")
+async def login_submit(request: Request) -> JSONResponse:
+    try:
+        body = await request.json()
+    except ValueError:
+        return JSONResponse({"ok": False, "error": "请求格式错误"}, status_code=400)
+    user = str(body.get("username", ""))
+    pwd = str(body.get("password", ""))
+    if hmac.compare_digest(user, USERNAME) and hmac.compare_digest(pwd, PASSWORD):
+        request.session["authed"] = True
+        return JSONResponse({"ok": True})
+    return JSONResponse({"ok": False, "error": "账号或密码错误"}, status_code=401)
+
+
+@app.post("/logout")
+async def logout(request: Request) -> JSONResponse:
+    request.session.clear()
+    return JSONResponse({"ok": True})
+
 
 @app.get("/", response_class=HTMLResponse)
-async def index() -> str:
+async def index(request: Request) -> str:
     return HTML_PAGE
 
 
@@ -239,6 +289,55 @@ async def usage() -> JSONResponse:
     return JSONResponse(result)
 
 
+LOGIN_PAGE = """<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
+<title>登录</title>
+<style>
+:root{--canvas:#f7f7f5;--surface:#fff;--text:#20201e;--muted:#77746f;--border:#e5e3df;--accent:#1769d2;--hover:#1058b6;--error:#b54435}
+*{box-sizing:border-box}
+body{margin:0;background:var(--canvas);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased;display:flex;align-items:center;justify-content:center;min-height:100vh}
+.card{width:min(360px,calc(100% - 48px));background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:36px 32px}
+h1{margin:0 0 28px;font-size:20px;font-weight:650;text-align:center}
+label{display:block;margin-bottom:6px;font-size:13px;font-weight:500}
+input{display:block;width:100%;margin-bottom:18px;padding:11px 14px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font:14px inherit;transition:border-color .15s,box-shadow .15s}
+input:focus{outline:0;border-color:var(--accent);box-shadow:0 0 0 3px rgba(23,105,210,.12)}
+button{width:100%;min-height:44px;border:0;border-radius:8px;background:var(--accent);color:#fff;font:600 14px inherit;cursor:pointer;transition:background .15s}
+button:hover{background:var(--hover)}
+.feedback{min-height:20px;margin-top:12px;color:var(--error);font-size:13px;text-align:center}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>登录</h1>
+  <form id="form">
+    <label for="username">账号</label>
+    <input id="username" name="username" autocomplete="username" required>
+    <label for="password">密码</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button type="submit">登录</button>
+    <div id="feedback" class="feedback" role="alert"></div>
+  </form>
+</div>
+<script>
+document.getElementById('form').addEventListener('submit',async(e)=>{
+  e.preventDefault();
+  const fb=document.getElementById('feedback');
+  fb.textContent='';
+  try{
+    const r=await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:document.getElementById('username').value,password:document.getElementById('password').value})});
+    const d=await r.json();
+    if(d.ok){window.location.href='/';}else{fb.textContent=d.error||'登录失败';}
+  }catch(err){fb.textContent='网络错误';}
+});
+</script>
+</body>
+</html>"""
+
+
 HTML_PAGE = """<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -252,7 +351,10 @@ HTML_PAGE = """<!doctype html>
 *{box-sizing:border-box}
 body{margin:0;background:var(--canvas);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
 main{width:min(720px,calc(100% - 48px));margin:0 auto;padding:56px 0 80px}
-h1{margin:0 0 40px;font-size:24px;font-weight:650;letter-spacing:-.02em}
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:40px}
+h1{margin:0;font-size:24px;font-weight:650;letter-spacing:-.02em}
+.logout{padding:6px 14px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--muted);font:500 13px inherit;cursor:pointer;transition:border-color .15s,color .15s}
+.logout:hover{border-color:var(--accent);color:var(--accent)}
 section+section{margin-top:40px}
 .heading{margin-bottom:12px}
 h2{margin:0;font-size:15px;font-weight:600}
@@ -288,7 +390,7 @@ td:nth-last-child(-n+2){font-variant-numeric:tabular-nums}
 </head>
 <body>
 <main>
-  <h1>Key 用量</h1>
+  <div class="topbar"><h1>Key 用量</h1><button id="logout" class="logout" type="button">退出</button></div>
   <section>
     <label for="category">上传 Key</label>
     <select id="category">
@@ -356,6 +458,11 @@ upload.addEventListener('click',async()=>{
     await loadUsage();
   }catch(error){feedback.className='feedback error';feedback.textContent=error.message;}
   finally{upload.disabled=false;upload.textContent='上传';}
+});
+
+document.getElementById('logout').addEventListener('click',async()=>{
+  await fetch('/logout',{method:'POST'});
+  window.location.href='/login';
 });
 
 loadUsage();
