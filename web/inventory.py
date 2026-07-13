@@ -722,14 +722,14 @@ INDEX_HTML = """<!DOCTYPE html>
       {% set picker_items = group['items']|selectattr('quantity','>',0)|list %}
       {% if picker_items %}
       <section class="brand-group" style="margin-bottom:8px;">
-        <button type="button" class="brand-toggle picker-brand-toggle" aria-expanded="false">
+        <button type="button" class="brand-toggle picker-brand-toggle" aria-expanded="true">
           <span class="brand-info">
             <span class="brand-name">{{ group['brand'] }}</span>
             <span class="brand-meta">{{ picker_items|length }} 个型号 · 共 {{ picker_items|sum(attribute='quantity') }} 件</span>
           </span>
-          <svg class="chevron picker-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m9 18 6-6-6-6"/></svg>
+          <svg class="chevron picker-chevron open" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m9 18 6-6-6-6"/></svg>
         </button>
-        <div class="brand-models picker-models">
+        <div class="brand-models picker-models open">
         {% for item in picker_items %}
           <button onclick='openOutModal({{ item.id }},{{ item.brand|tojson }},{{ item.model|tojson }},{{ item.quantity }},{{ ('%d.%02d'|format(item.unit_cost_cents // 100, item.unit_cost_cents % 100))|tojson }})' style="width:100%;text-align:left;padding:12px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);transition:background var(--dur) var(--ease);">
             <div style="flex:1;min-width:0;">
@@ -835,20 +835,21 @@ function openOutModal(id,brand,model,qty,price){document.getElementById('out-ite
 function closeOutModal(){closeModal('out-modal');}
 function deleteItem(id,brand,model){document.getElementById('delete-desc').textContent='确定删除「'+brand+' · '+model+'」吗？历史记录将保留。';document.getElementById('delete-form').action='/delete/'+id;openModal('delete-modal');}
 function closeDeleteModal(){closeModal('delete-modal');}
-document.querySelectorAll('.brand-toggle').forEach(button=>button.addEventListener('click',()=>{
+function toggleBrandGroup(button){
   const models=button.nextElementSibling;
+  if(!models)return;
   const expanded=button.getAttribute('aria-expanded')==='true';
   button.setAttribute('aria-expanded',String(!expanded));
   models.classList.toggle('open',!expanded);
-  button.querySelector('.chevron').classList.toggle('open',!expanded);
-}));
-document.querySelectorAll('.picker-brand-toggle').forEach(button=>button.addEventListener('click',()=>{
-  const models=button.nextElementSibling;
-  const expanded=button.getAttribute('aria-expanded')==='true';
-  button.setAttribute('aria-expanded',String(!expanded));
-  models.classList.toggle('open',!expanded);
-  button.querySelector('.picker-chevron').classList.toggle('open',!expanded);
-}));
+  const chevron=button.querySelector('.chevron');
+  if(chevron)chevron.classList.toggle('open',!expanded);
+}
+document.querySelectorAll('.brand-toggle:not(.picker-brand-toggle)').forEach(button=>{
+  button.addEventListener('click',()=>toggleBrandGroup(button));
+});
+document.querySelectorAll('.picker-brand-toggle').forEach(button=>{
+  button.addEventListener('click',()=>toggleBrandGroup(button));
+});
 document.getElementById('inventory-search').addEventListener('input',event=>{
   const query=event.target.value.trim().toLocaleLowerCase('zh-CN');
   document.querySelectorAll('[data-brand-group]').forEach(group=>{
@@ -1069,6 +1070,14 @@ def login_page(request: Request):
     return HTMLResponse(html)
 
 
+def _credentials_match(given: str, expected: str) -> bool:
+    """Timing-safe compare; encode first so non-ASCII input won't raise."""
+    try:
+        return secrets.compare_digest(given.encode("utf-8"), expected.encode("utf-8"))
+    except (TypeError, ValueError):
+        return False
+
+
 @app.post("/login", response_class=HTMLResponse)
 def login(
     request: Request,
@@ -1077,7 +1086,7 @@ def login(
     next: str = Form("/"),
 ):
     next_path = safe_next_path(next)
-    valid = secrets.compare_digest(username, AUTH_USER) and secrets.compare_digest(
+    valid = _credentials_match(username, AUTH_USER) and _credentials_match(
         password, AUTH_PASS
     )
     if not valid:
