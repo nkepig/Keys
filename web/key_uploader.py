@@ -3,7 +3,6 @@ from __future__ import annotations
 import anyio
 import hmac
 import os
-import secrets
 from datetime import datetime
 from typing import Any, Final
 
@@ -16,8 +15,10 @@ from starlette.middleware.sessions import SessionMiddleware
 API_KEY: Final = os.environ.get(
     "MSK_API_KEY", "msk_live_8499a96e4561ad3aa2b63ba3cc5a61505107db5a74a06a1b"
 )
-USERNAME: Final = os.environ.get("KEY_APP_USER", "root")
-PASSWORD: Final = os.environ.get("KEY_APP_PASS", "asd12345")
+USERS: Final[dict[str, dict[str, Any]]] = {
+    "root": {"password": "1qazxsw2", "locked_tag": None},
+    "openai1": {"password": "asd12345", "locked_tag": "openai1"},
+}
 SESSION_SECRET: Final = os.environ.get(
     "KEY_APP_SECRET", "k7m2x9q4z8r1v6t3y0w5a8b2c6d4e7f9"
 )
@@ -35,10 +36,47 @@ MAX_RETRIES: Final = 3
 TIMEOUT: Final = 60.0
 
 
+def _cred_ok(given: str, expected: str) -> bool:
+    try:
+        return hmac.compare_digest(given.encode("utf-8"), expected.encode("utf-8"))
+    except (TypeError, ValueError):
+        return False
+
+
+def authenticate(username: str, password: str) -> dict[str, Any] | None:
+    account = USERS.get(username)
+    if not account:
+        return None
+    if not _cred_ok(password, str(account["password"])):
+        return None
+    return {
+        "username": username,
+        "locked_tag": account.get("locked_tag"),
+    }
+
+
+def current_user(request: Request) -> dict[str, Any] | None:
+    username = request.session.get("username")
+    if not username or username not in USERS:
+        return None
+    return {
+        "username": username,
+        "locked_tag": USERS[username].get("locked_tag"),
+    }
+
+
 class UploadRequest(BaseModel):
     model_config = ConfigDict(frozen=True)
     category: str = "openai"
     keys_text: str = ""
+    tag: str = ""
+
+
+def make_batch_tag(raw: str = "") -> str:
+    tag = raw.strip()
+    if tag:
+        return tag[:80]
+    return "batch-" + datetime.now().strftime("%Y%m%d-%H%M%S-%f")
 
 
 def validate_key(key: str, category: str) -> bool:
@@ -118,30 +156,35 @@ async def post_batch(
     raise RuntimeError(last_error)
 
 
-async def upload_keys(text: str, category: str) -> dict[str, Any]:
+async def upload_keys(text: str, category: str, tag: str = "") -> dict[str, Any]:
     keys, invalid = clean_keys(text, category)
     if not keys:
         label = CATEGORIES.get(category, category)
         return {"ok": False, "error": f"请输入有效的 {label} Key"}
 
-    tag = "batch-" + datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    batch_tag = make_batch_tag(tag)
     success = 0
     skipped = 0
     failed = 0
+    api_invalid = 0
     async with httpx.AsyncClient() as client:
         for start in range(0, len(keys), BATCH_SIZE):
-            result = await post_batch(client, tag, keys[start : start + BATCH_SIZE], category)
+            result = await post_batch(
+                client, batch_tag, keys[start : start + BATCH_SIZE], category
+            )
             data = result.get("data", {})
             success += data.get("success", 0)
             skipped += data.get("skipped_dup", 0)
             failed += data.get("failed", 0)
+            api_invalid += data.get("invalid", 0)
 
     return {
         "ok": True,
+        "tag": batch_tag,
         "total": len(keys),
         "success": success,
         "skipped": skipped,
-        "invalid": invalid,
+        "invalid": invalid + api_invalid,
         "failed": failed,
     }
 
@@ -159,6 +202,8 @@ def usage_rows(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         except (TypeError, ValueError):
             usage = 0.0
         status = STATUS_MAP.get(item.get("status", 0), "-")
+        category = str(item.get("category") or "-")
+        tag = str(item.get("tag") or "-")
         created_raw = item.get("created_at", "")
         created_at = created_raw[:19].replace("T", " ") if created_raw else "-"
         rows.append(
@@ -166,13 +211,15 @@ def usage_rows(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "key": str(key),
                 "usage": usage,
                 "status": status,
+                "category": category,
+                "tag": tag,
                 "created_at": created_at,
             }
         )
     return rows
 
 
-async def fetch_usage() -> dict[str, Any]:
+async def fetch_usage(locked_tag: str | None = None) -> dict[str, Any]:
     headers = {"Authorization": f"Bearer {API_KEY}"}
     page = 1
     rows: list[dict[str, Any]] = []
@@ -210,7 +257,9 @@ async def fetch_usage() -> dict[str, Any]:
                 break
             page += 1
 
-    return {"ok": True, "items": rows}
+    if locked_tag:
+        rows = [row for row in rows if row.get("tag") == locked_tag]
+    return {"ok": True, "items": rows, "locked_tag": locked_tag}
 
 
 app = FastAPI(title="Key Usage")
@@ -223,7 +272,7 @@ async def require_login(request: Request, call_next):
     path = request.url.path
     if path in OPEN_PATHS or path.startswith("/login"):
         return await call_next(request)
-    if not request.session.get("authed"):
+    if not request.session.get("authed") or not request.session.get("username"):
         if path.startswith("/api/"):
             return JSONResponse({"ok": False, "error": "未登录"}, status_code=401)
         return RedirectResponse("/login", status_code=302)
@@ -244,12 +293,21 @@ async def login_submit(request: Request) -> JSONResponse:
         body = await request.json()
     except ValueError:
         return JSONResponse({"ok": False, "error": "请求格式错误"}, status_code=400)
-    user = str(body.get("username", ""))
+    user = str(body.get("username", "")).strip()
     pwd = str(body.get("password", ""))
-    if hmac.compare_digest(user, USERNAME) and hmac.compare_digest(pwd, PASSWORD):
-        request.session["authed"] = True
-        return JSONResponse({"ok": True})
-    return JSONResponse({"ok": False, "error": "账号或密码错误"}, status_code=401)
+    account = authenticate(user, pwd)
+    if not account:
+        return JSONResponse({"ok": False, "error": "账号或密码错误"}, status_code=401)
+    request.session.clear()
+    request.session["authed"] = True
+    request.session["username"] = account["username"]
+    return JSONResponse(
+        {
+            "ok": True,
+            "username": account["username"],
+            "locked_tag": account["locked_tag"],
+        }
+    )
 
 
 @app.post("/logout")
@@ -258,38 +316,54 @@ async def logout(request: Request) -> JSONResponse:
     return JSONResponse({"ok": True})
 
 
+@app.get("/api/me")
+async def me(request: Request) -> JSONResponse:
+    account = current_user(request)
+    if not account:
+        return JSONResponse({"ok": False, "error": "未登录"}, status_code=401)
+    return JSONResponse({"ok": True, **account})
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> str:
     return HTML_PAGE
 
 
 @app.post("/api/upload")
-async def upload(request: UploadRequest) -> JSONResponse:
+async def upload(request: Request, body: UploadRequest) -> JSONResponse:
+    account = current_user(request)
+    if not account:
+        return JSONResponse({"ok": False, "error": "未登录"}, status_code=401)
     if not API_KEY:
         return JSONResponse(
             {"ok": False, "error": "请设置 MSK_API_KEY 环境变量"}, status_code=503
         )
-    if request.category not in CATEGORIES:
+    if body.category not in CATEGORIES:
         return JSONResponse(
             {"ok": False, "error": "不支持的分类"}, status_code=400
         )
+    tag = account["locked_tag"] if account["locked_tag"] else body.tag
     try:
-        result = await upload_keys(request.keys_text, request.category)
+        result = await upload_keys(body.keys_text, body.category, tag or "")
     except (httpx.RequestError, PermissionError, RuntimeError, ValueError) as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=502)
     return JSONResponse(result)
 
 
 @app.get("/api/usage")
-async def usage() -> JSONResponse:
+async def usage(request: Request) -> JSONResponse:
+    account = current_user(request)
+    if not account:
+        return JSONResponse({"ok": False, "error": "未登录"}, status_code=401)
     if not API_KEY:
         return JSONResponse(
             {"ok": False, "error": "请设置 MSK_API_KEY 环境变量"}, status_code=503
         )
     try:
-        result = await fetch_usage()
+        result = await fetch_usage(account.get("locked_tag"))
     except (httpx.RequestError, RuntimeError, ValueError):
         return JSONResponse({"ok": False, "error": "加载用量失败"}, status_code=502)
+    result["username"] = account["username"]
     return JSONResponse(result)
 
 
@@ -363,15 +437,17 @@ HTML_PAGE = """<!doctype html>
 <link rel="icon" href="data:,">
 <title>Key 管理</title>
 <style>
-:root{--bg1:#eef2ff;--bg2:#f8fafc;--bg3:#faf5ff;--surface:rgba(255,255,255,.72);--surface-solid:#fff;--text:#1e1b2e;--muted:#6b6786;--border:rgba(99,102,241,.12);--accent:#6366f1;--accent2:#8b5cf6;--hover:#4f46e5;--success:#10b981;--success-bg:rgba(16,185,129,.1);--error:#ef4444;--error-bg:rgba(239,68,68,.1)}
+:root{--bg1:#eef2ff;--bg2:#f8fafc;--bg3:#faf5ff;--surface:rgba(255,255,255,.72);--surface-solid:#fff;--text:#1e1b2e;--muted:#6b6786;--border:rgba(99,102,241,.12);--accent:#6366f1;--accent2:#8b5cf6;--hover:#4f46e5;--success:#10b981;--success-bg:rgba(16,185,129,.1);--error:#ef4444;--error-bg:rgba(239,68,68,.1);--tag-bg:rgba(99,102,241,.1);--tag-text:#4f46e5}
 *{box-sizing:border-box;margin:0;padding:0}
 body{min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;font-size:14px;color:var(--text);background:linear-gradient(135deg,var(--bg1) 0%,var(--bg2) 50%,var(--bg3) 100%);position:relative;overflow-x:hidden}
 body::before{content:'';position:fixed;top:-20%;left:-10%;width:50%;height:60%;background:radial-gradient(ellipse,rgba(99,102,241,.1),transparent 60%);filter:blur(60px);pointer-events:none;animation:float1 14s ease-in-out infinite}
 body::after{content:'';position:fixed;bottom:-20%;right:-10%;width:50%;height:60%;background:radial-gradient(ellipse,rgba(139,92,246,.08),transparent 60%);filter:blur(60px);pointer-events:none;animation:float2 16s ease-in-out infinite}
 @keyframes float1{50%{transform:translate(30px,20px)}}
 @keyframes float2{50%{transform:translate(-20px,-15px)}}
-main{position:relative;width:min(820px,calc(100% - 48px));margin:0 auto;padding:56px 0 80px}
-.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:44px;animation:slideUp .6s cubic-bezier(.16,1,.3,1)}
+main{position:relative;width:min(960px,calc(100% - 48px));margin:0 auto;padding:56px 0 80px}
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:44px;animation:slideUp .6s cubic-bezier(.16,1,.3,1);gap:12px}
+.topbar-right{display:flex;align-items:center;gap:10px}
+.user-chip{padding:8px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--muted);font:500 13px inherit}
 h1{font-size:28px;font-weight:700;letter-spacing:-.025em;background:linear-gradient(135deg,var(--text),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .logout{padding:8px 18px;border:1px solid var(--border);border-radius:10px;background:var(--surface);backdrop-filter:blur(12px);color:var(--muted);font:500 13px inherit;cursor:pointer;transition:all .2s}
 .logout:hover{border-color:var(--accent);color:var(--accent);box-shadow:0 4px 12px rgba(99,102,241,.12)}
@@ -380,15 +456,20 @@ section:nth-child(2){animation-delay:.1s}
 section+section{margin-top:36px}
 @keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
 .card{background:var(--surface);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);border:1px solid var(--border);border-radius:16px;padding:28px 28px 24px;box-shadow:0 1px 2px rgba(0,0,0,.03),0 8px 32px rgba(99,102,241,.06),0 2px 8px rgba(0,0,0,.02)}
-.heading{margin-bottom:16px}
+.heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
 h2{font-size:16px;font-weight:600;letter-spacing:-.01em}
 label{display:block;margin-bottom:8px;font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.03em;text-transform:uppercase}
-select{display:block;width:100%;max-width:280px;margin-bottom:14px;padding:11px 14px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.6);color:var(--text);font:14px inherit;cursor:pointer;transition:all .2s}
-select:focus{outline:0;border-color:var(--accent);background:rgba(255,255,255,.9);box-shadow:0 0 0 4px rgba(99,102,241,.1)}
+.field-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.field{flex:1;min-width:180px}
+.field select,.field input{display:block;width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.6);color:var(--text);font:14px inherit;transition:all .2s}
+.field select{cursor:pointer}
+.field select:focus,.field input:focus{outline:0;border-color:var(--accent);background:rgba(255,255,255,.9);box-shadow:0 0 0 4px rgba(99,102,241,.1)}
+.field input::placeholder{color:var(--muted);opacity:.6}
+.hint{margin-top:6px;font-size:12px;color:var(--muted)}
 textarea{display:block;width:100%;min-height:170px;padding:14px 16px;resize:vertical;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.6);color:var(--text);font:13px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;transition:all .2s}
 textarea:focus{outline:0;border-color:var(--accent);background:rgba(255,255,255,.9);box-shadow:0 0 0 4px rgba(99,102,241,.1)}
 textarea::placeholder{color:var(--muted);opacity:.6}
-.actions{display:flex;align-items:center;gap:14px;margin-top:16px}
+.actions{display:flex;align-items:center;gap:14px;margin-top:16px;flex-wrap:wrap}
 button{min-height:44px;padding:0 26px;border:0;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;font:600 14px inherit;cursor:pointer;transition:transform .15s,box-shadow .15s;box-shadow:0 4px 14px rgba(99,102,241,.25)}
 button:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(99,102,241,.3)}
 button:active{transform:translateY(0)}
@@ -397,16 +478,18 @@ button:disabled{cursor:wait;opacity:.6;transform:none}
 .feedback{min-height:22px;color:var(--muted);font-size:13px}
 .feedback.success{color:var(--success);font-weight:500}
 .feedback.error{color:var(--error);font-weight:500}
-.list{overflow:hidden;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,.55);backdrop-filter:blur(16px);box-shadow:0 4px 24px rgba(99,102,241,.05)}
-table{width:100%;border-collapse:collapse}
-th,td{padding:14px 18px;text-align:left;border-bottom:1px solid var(--border)}
+.filter select{min-width:200px;max-width:280px;padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.7);color:var(--text);font:13px inherit}
+.list{overflow:auto;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,.55);backdrop-filter:blur(16px);box-shadow:0 4px 24px rgba(99,102,241,.05)}
+table{width:100%;border-collapse:collapse;min-width:720px}
+th,td{padding:14px 16px;text-align:left;border-bottom:1px solid var(--border);vertical-align:middle}
 th{color:var(--muted);font-size:11px;font-weight:600;background:rgba(99,102,241,.04);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
-th:nth-last-child(-n+2),td:nth-last-child(-n+2){text-align:right}
+th.num,td.num{text-align:right;font-variant-numeric:tabular-nums}
 tbody tr{transition:background .15s}
 tbody tr:hover{background:rgba(99,102,241,.03)}
 tbody tr:last-child td{border-bottom:0}
-td:first-child{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
-td:nth-last-child(-n+2){font-variant-numeric:tabular-nums}
+td.key{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+.tag{display:inline-flex;max-width:220px;align-items:center;padding:3px 10px;border-radius:999px;background:var(--tag-bg);color:var(--tag-text);font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cat{color:var(--muted);font-size:12px;font-weight:500}
 .badge{display:inline-flex;align-items:center;gap:5px;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:600}
 .badge::before{content:'';width:6px;height:6px;border-radius:50%}
 .badge-on{background:var(--success-bg);color:var(--success)}
@@ -416,7 +499,7 @@ td:nth-last-child(-n+2){font-variant-numeric:tabular-nums}
 .state{padding:48px 16px;text-align:center;color:var(--muted);font-size:14px}
 .spinner{display:inline-block;width:14px;height:14px;margin-right:8px;vertical-align:-2px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-@media(max-width:640px){main{width:min(100% - 32px,820px);padding-top:36px}h1{font-size:22px}th,td{padding:12px 10px;font-size:12px}td:first-child{font-size:12px}.card{padding:20px 18px}}
+@media(max-width:640px){main{width:min(100% - 32px,960px);padding-top:36px}h1{font-size:22px}th,td{padding:12px 10px;font-size:12px}td.key{font-size:12px}.card{padding:20px 18px}.tag{max-width:140px}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -424,19 +507,32 @@ td:nth-last-child(-n+2){font-variant-numeric:tabular-nums}
 <main>
   <div class="topbar">
     <h1>Key 管理</h1>
-    <button id="logout" class="logout" type="button">退出登录</button>
+    <div class="topbar-right">
+      <span id="user-chip" class="user-chip">…</span>
+      <button id="logout" class="logout" type="button">退出登录</button>
+    </div>
   </div>
   <section>
     <div class="card">
-      <label for="category">上传 Key</label>
-      <select id="category">
-        <option value="anthropic">Anthropic</option>
-        <option value="anthropic_small">Anthropic (小额度)</option>
-        <option value="openai" selected>OpenAI</option>
-        <option value="aws">AWS</option>
-        <option value="azure">Azure</option>
-        <option value="ai_studio">AI Studio</option>
-      </select>
+      <div class="field-row">
+        <div class="field">
+          <label for="category">分类</label>
+          <select id="category">
+            <option value="anthropic">Anthropic</option>
+            <option value="anthropic_small">Anthropic (小额度)</option>
+            <option value="openai" selected>OpenAI</option>
+            <option value="aws">AWS</option>
+            <option value="azure">Azure</option>
+            <option value="ai_studio">AI Studio</option>
+          </select>
+        </div>
+        <div class="field" id="tag-field">
+          <label for="tag">批次标签 Tag</label>
+          <input id="tag" type="text" maxlength="80" placeholder="留空自动生成 batch-时间戳" autocomplete="off">
+          <p class="hint" id="tag-hint">用于标记本批上传，可在用量列表筛选</p>
+        </div>
+      </div>
+      <label for="keys">上传 Key</label>
       <textarea id="keys" placeholder="每行一个 Key" spellcheck="false"></textarea>
       <div class="actions">
         <button id="upload" type="button">上传</button>
@@ -445,16 +541,32 @@ td:nth-last-child(-n+2){font-variant-numeric:tabular-nums}
     </div>
   </section>
   <section>
-    <div class="heading"><h2>用量</h2></div>
+    <div class="heading">
+      <h2>用量</h2>
+      <div class="filter" id="tag-filter-wrap">
+        <label for="tag-filter" class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">按 Tag 筛选</label>
+        <select id="tag-filter" aria-label="按 Tag 筛选">
+          <option value="">全部 Tag</option>
+        </select>
+      </div>
+    </div>
     <div id="usage" class="list"><div class="state">加载中…</div></div>
   </section>
 </main>
 <script>
 const keys=document.getElementById('keys');
 const category=document.getElementById('category');
+const tagInput=document.getElementById('tag');
+const tagHint=document.getElementById('tag-hint');
+const tagFilter=document.getElementById('tag-filter');
+const tagFilterWrap=document.getElementById('tag-filter-wrap');
+const userChip=document.getElementById('user-chip');
 const upload=document.getElementById('upload');
 const feedback=document.getElementById('feedback');
 const usage=document.getElementById('usage');
+let allItems=[];
+let lockedTag=null;
+let currentUsername='';
 const placeholders={
   anthropic:'每行一个 sk-ant-... Key',
   anthropic_small:'每行一个 sk-ant-... Key (小额度)',
@@ -472,6 +584,57 @@ const formatUsage=value=>{
   return '$'+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
 };
 const badge=status=>{const cls=status==='开启'?'badge-on':status==='停用'?'badge-off':'';return cls?'<span class="badge '+cls+'">'+escapeHtml(status)+'</span>':'<span>'+escapeHtml(status)+'</span>';};
+const tagPill=tag=>'<span class="tag" title="'+escapeHtml(tag)+'">'+escapeHtml(tag||'-')+'</span>';
+
+function applyAccountUI(){
+  userChip.textContent=currentUsername?(lockedTag?currentUsername+' · Tag 锁定':'管理员 '+currentUsername):'…';
+  if(lockedTag){
+    tagInput.value=lockedTag;
+    tagInput.readOnly=true;
+    tagInput.disabled=true;
+    tagHint.textContent='当前账号 Tag 已锁定为用户名，不可修改';
+    tagFilterWrap.style.display='none';
+  }else{
+    tagInput.readOnly=false;
+    tagInput.disabled=false;
+    if(!tagInput.value)tagInput.placeholder='留空自动生成 batch-时间戳';
+    tagHint.textContent='用于标记本批上传，可在用量列表筛选';
+    tagFilterWrap.style.display='';
+  }
+}
+
+function uniqueTags(items){
+  return [...new Set(items.map(item=>item.tag).filter(tag=>tag&&tag!=='-'))].sort();
+}
+
+function renderTagFilter(selected=''){
+  if(lockedTag)return;
+  const tags=uniqueTags(allItems);
+  const current=selected||tagFilter.value||'';
+  tagFilter.innerHTML='<option value="">全部 Tag</option>'+tags.map(tag=>'<option value="'+escapeHtml(tag)+'">'+escapeHtml(tag)+'</option>').join('');
+  tagFilter.value=tags.includes(current)?current:'';
+}
+
+function renderUsage(){
+  const selected=lockedTag||tagFilter.value;
+  const items=selected?allItems.filter(item=>item.tag===selected):allItems;
+  if(!items.length){
+    usage.innerHTML='<div class="state">'+(allItems.length?'当前 Tag 无数据':'暂无数据')+'</div>';
+    return;
+  }
+  usage.innerHTML='<table><thead><tr><th>Key</th><th>分类</th><th>Tag</th><th class="num">用量</th><th>状态</th><th>创建时间</th></tr></thead><tbody>'+
+    items.map(item=>'<tr><td class="key">'+escapeHtml(item.key)+'</td><td class="cat">'+escapeHtml(item.category)+'</td><td>'+tagPill(item.tag)+'</td><td class="num">'+formatUsage(item.usage)+'</td><td>'+badge(item.status)+'</td><td>'+escapeHtml(item.created_at)+'</td></tr>').join('')+
+    '</tbody></table>';
+}
+
+async function loadMe(){
+  const response=await fetch('/api/me');
+  const data=await response.json();
+  if(!data.ok)throw new Error(data.error||'未登录');
+  currentUsername=data.username||'';
+  lockedTag=data.locked_tag||null;
+  applyAccountUI();
+}
 
 async function loadUsage(){
   usage.innerHTML='<div class="state">加载中…</div>';
@@ -479,10 +642,16 @@ async function loadUsage(){
     const response=await fetch('/api/usage');
     const data=await response.json();
     if(!data.ok)throw new Error(data.error||'加载失败');
-    if(!data.items.length){usage.innerHTML='<div class="state">暂无数据</div>';return;}
-    usage.innerHTML='<table><thead><tr><th>Key</th><th>用量</th><th>状态</th><th>创建时间</th></tr></thead><tbody>'+data.items.map(item=>'<tr><td>'+escapeHtml(item.key)+'</td><td>'+formatUsage(item.usage)+'</td><td>'+badge(item.status)+'</td><td>'+escapeHtml(item.created_at)+'</td></tr>').join('')+'</tbody></table>';
+    if(data.username)currentUsername=data.username;
+    if(data.locked_tag!==undefined)lockedTag=data.locked_tag||null;
+    applyAccountUI();
+    allItems=data.items||[];
+    renderTagFilter();
+    renderUsage();
   }catch(error){usage.innerHTML='<div class="state">'+escapeHtml(error.message)+'</div>';}
 }
+
+tagFilter.addEventListener('change',renderUsage);
 
 upload.addEventListener('click',async()=>{
   feedback.className='feedback';
@@ -490,13 +659,22 @@ upload.addEventListener('click',async()=>{
   upload.disabled=true;
   upload.innerHTML='<span class="spinner"></span>上传中';
   try{
-    const response=await fetch('/api/upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({category:category.value,keys_text:keys.value})});
+    const response=await fetch('/api/upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({category:category.value,keys_text:keys.value,tag:lockedTag||tagInput.value.trim()})});
     const data=await response.json();
     if(!data.ok)throw new Error(data.error||'上传失败');
     feedback.className='feedback success';
-    feedback.textContent='已上传 '+data.success+' 个 Key';
+    const parts=['已上传 '+data.success+' 个'];
+    if(data.skipped)parts.push('跳过 '+data.skipped);
+    if(data.invalid)parts.push('无效 '+data.invalid);
+    if(data.failed)parts.push('失败 '+data.failed);
+    parts.push('Tag: '+data.tag);
+    feedback.textContent=parts.join(' · ');
     keys.value='';
     await loadUsage();
+    if(data.tag&&!lockedTag){
+      tagFilter.value=data.tag;
+      renderUsage();
+    }
   }catch(error){feedback.className='feedback error';feedback.textContent=error.message;}
   finally{upload.disabled=false;upload.textContent='上传';}
 });
@@ -506,7 +684,14 @@ document.getElementById('logout').addEventListener('click',async()=>{
   window.location.href='/login';
 });
 
-loadUsage();
+(async()=>{
+  try{
+    await loadMe();
+    await loadUsage();
+  }catch(error){
+    window.location.href='/login';
+  }
+})();
 </script>
 </body>
 </html>
