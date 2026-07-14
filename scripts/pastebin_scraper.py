@@ -53,7 +53,8 @@ VERIFY_CONCURRENT = 40
 BASE_URL = "https://pastebin.com"
 SEARCH_URL = f"{BASE_URL}/search"
 DEFAULT_QUERIES = ["sk-", "openai", "api_key", "AIzaSy", "gemini"]
-BROWSER_PATH = "/opt/google/chrome/chrome"
+BROWSER_PATH = None  # None=自动探测；Mac 勿写 /opt/google/chrome/chrome
+LOGIN_INCOGNITO = False  # 登录必须非无痕，无痕更容易被 CF 卡住
 
 
 def pick_account(accounts: list[str]) -> Optional[str]:
@@ -94,38 +95,68 @@ async def login_pastebin(
 
     tab = browser.tab
     tab.get(BASE_URL)
+    await asyncio.sleep(2)
 
     max_turnstile_retries = 3
     for retry in range(max_turnstile_retries):
         if browser.detect_turnstile():
             logger.info("首页 Turnstile（第 {}/{} 次）", retry + 1, max_turnstile_retries)
-            turnstile_token = browser.bypass_turnstile(max_attempts=10, wait_interval=1.0)
+            turnstile_token = browser.bypass_turnstile(max_attempts=20, wait_interval=2.0)
             if turnstile_token:
-                await asyncio.sleep(3)
+                await asyncio.sleep(2)
                 break
+            # 仅全页盾才刷新；刷新会重置已点过的框
+            if browser._challenge_active():
+                logger.warning("首页全页盾未通过，刷新重试…")
+                tab.refresh()
+                await asyncio.sleep(3)
+            else:
+                logger.warning("首页嵌入式 Turnstile 未出 token，稍等再试…")
+                await asyncio.sleep(3)
         else:
             logger.info("首页未检测到 Turnstile")
             break
+    else:
+        if browser.detect_turnstile():
+            raise RuntimeError("首页 Cloudflare Turnstile 无法通过，中止登录")
 
-    tab.ele("xpath:/html/body/div[1]/div[1]/div/div/div[2]/div/a[1]").click()
+    login_link = tab.ele("xpath:/html/body/div[1]/div[1]/div/div/div[2]/div/a[1]", timeout=5)
+    if not login_link:
+        raise RuntimeError("未找到登录入口，可能仍被 Cloudflare 拦截")
+    login_link.click()
     await asyncio.sleep(5)
 
     for retry in range(max_turnstile_retries):
         if browser.detect_turnstile():
             logger.info("登录页 Turnstile（第 {}/{} 次）", retry + 1, max_turnstile_retries)
-            turnstile_token = browser.bypass_turnstile(max_attempts=10, wait_interval=1.0)
+            turnstile_token = browser.bypass_turnstile(max_attempts=20, wait_interval=2.0)
             if turnstile_token:
+                await asyncio.sleep(2)
                 break
+            if browser._challenge_active():
+                logger.warning("登录页全页盾未通过，刷新重试…")
+                tab.refresh()
+                await asyncio.sleep(3)
+            else:
+                # 嵌入式组件：不要刷新，刷新 = 勾选状态清零
+                logger.warning("登录页验证框未出 token（点完又回可能是指纹被拒），等待后重试点击…")
+                await asyncio.sleep(4)
         else:
-            logger.info("登录页未检测到 Turnstile")
+            logger.info("登录页未检测到待处理 Turnstile")
             break
+    else:
+        if browser.detect_turnstile():
+            raise RuntimeError("登录页 Cloudflare Turnstile 无法通过，中止登录")
 
-    await asyncio.sleep(3)
+    await asyncio.sleep(2)
     account = pick_account(accounts)
     if not account:
         raise RuntimeError("未配置 Pastebin 账号：请在脚本中填写 pastebin_accounts 列表")
 
-    tab.ele('xpath://*[@id="loginform-username"]').input(account)
+    user_input = tab.ele('xpath://*[@id="loginform-username"]', timeout=8)
+    if not user_input:
+        raise RuntimeError("未找到登录表单，可能 Turnstile 仍未通过或页面结构变化")
+    user_input.input(account)
     tab.ele('xpath://*[@id="loginform-password"]').input(pwd)
 
     for _ in range(5):
@@ -285,10 +316,10 @@ async def run_pastebin_scrape(
                     except Exception:
                         pass
 
-                logger.info("创建无痕浏览器（剩余 {}）…", len(remaining_urls))
+                logger.info("创建浏览器（剩余 {}）…", len(remaining_urls))
                 browser = AutoBrowseService(
-                    incognito=True,
-                    headless=True,
+                    incognito=LOGIN_INCOGNITO,
+                    headless=False,
                     enable_turnstile_bypass=True,
                     browser_path=browser_path,
                 )
