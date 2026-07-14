@@ -153,7 +153,11 @@ def usage_rows(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for item in items:
         key = item.get("key_masked") or "-"
-        usage = item.get("used_quota", 0)
+        raw_usage = item.get("used_quota", 0) or 0
+        try:
+            usage = float(raw_usage) / 50000
+        except (TypeError, ValueError):
+            usage = 0.0
         status = STATUS_MAP.get(item.get("status", 0), "-")
         created_raw = item.get("created_at", "")
         created_at = created_raw[:19].replace("T", " ") if created_raw else "-"
@@ -462,7 +466,11 @@ const placeholders={
 category.addEventListener('change',()=>{keys.placeholder=placeholders[category.value]||'每行一个 Key';});
 keys.placeholder=placeholders[category.value];
 const escapeHtml=value=>String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
-const formatNum=value=>typeof value==='number'?value.toLocaleString():escapeHtml(value??0);
+const formatUsage=value=>{
+  const n=Number(value);
+  if(!Number.isFinite(n))return '$0.00';
+  return '$'+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+};
 const badge=status=>{const cls=status==='开启'?'badge-on':status==='停用'?'badge-off':'';return cls?'<span class="badge '+cls+'">'+escapeHtml(status)+'</span>':'<span>'+escapeHtml(status)+'</span>';};
 
 async function loadUsage(){
@@ -472,7 +480,7 @@ async function loadUsage(){
     const data=await response.json();
     if(!data.ok)throw new Error(data.error||'加载失败');
     if(!data.items.length){usage.innerHTML='<div class="state">暂无数据</div>';return;}
-    usage.innerHTML='<table><thead><tr><th>Key</th><th>用量</th><th>状态</th><th>创建时间</th></tr></thead><tbody>'+data.items.map(item=>'<tr><td>'+escapeHtml(item.key)+'</td><td>'+formatNum(item.usage)+'</td><td>'+badge(item.status)+'</td><td>'+escapeHtml(item.created_at)+'</td></tr>').join('')+'</tbody></table>';
+    usage.innerHTML='<table><thead><tr><th>Key</th><th>用量</th><th>状态</th><th>创建时间</th></tr></thead><tbody>'+data.items.map(item=>'<tr><td>'+escapeHtml(item.key)+'</td><td>'+formatUsage(item.usage)+'</td><td>'+badge(item.status)+'</td><td>'+escapeHtml(item.created_at)+'</td></tr>').join('')+'</tbody></table>';
   }catch(error){usage.innerHTML='<div class="state">'+escapeHtml(error.message)+'</div>';}
 }
 
