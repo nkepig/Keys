@@ -155,7 +155,7 @@ def usage_rows(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         key = item.get("key_masked") or "-"
         raw_usage = item.get("used_quota", 0) or 0
         try:
-            usage = float(raw_usage) / 50000
+            usage = float(raw_usage) / 500000
         except (TypeError, ValueError):
             usage = 0.0
         status = STATUS_MAP.get(item.get("status", 0), "-")
