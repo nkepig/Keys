@@ -288,7 +288,7 @@ async def run_pastebin_scrape(
                 logger.info("创建无痕浏览器（剩余 {}）…", len(remaining_urls))
                 browser = AutoBrowseService(
                     incognito=True,
-                    headless=False,
+                    headless=True,
                     enable_turnstile_bypass=True,
                     browser_path=browser_path,
                 )
