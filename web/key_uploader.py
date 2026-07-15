@@ -15,9 +15,9 @@ from starlette.middleware.sessions import SessionMiddleware
 API_KEY: Final = os.environ.get(
     "MSK_API_KEY", "msk_live_8499a96e4561ad3aa2b63ba3cc5a61505107db5a74a06a1b"
 )
-USERS: Final[dict[str, str]] = {
-    "root": "1qazxsw2",
-    "openai1": "asd12345",
+USERS: Final[dict[str, dict[str, Any]]] = {
+    "root": {"password": "1qazxsw2", "is_admin": True},
+    "openai1": {"password": "asd12345", "is_admin": False},
 }
 SESSION_SECRET: Final = os.environ.get(
     "KEY_APP_SECRET", "k7m2x9q4z8r1v6t3y0w5a8b2c6d4e7f9"
@@ -45,19 +45,22 @@ def _cred_ok(given: str, expected: str) -> bool:
 
 
 def authenticate(username: str, password: str) -> dict[str, Any] | None:
-    expected = USERS.get(username)
-    if expected is None:
+    account = USERS.get(username)
+    if account is None:
         return None
-    if not _cred_ok(password, expected):
+    if not _cred_ok(password, str(account["password"])):
         return None
-    return {"username": username}
+    return {"username": username, "is_admin": bool(account.get("is_admin"))}
 
 
 def current_user(request: Request) -> dict[str, Any] | None:
     username = request.session.get("username")
     if not username or username not in USERS:
         return None
-    return {"username": username}
+    return {
+        "username": username,
+        "is_admin": bool(USERS[username].get("is_admin")),
+    }
 
 
 class UploadRequest(BaseModel):
@@ -222,7 +225,7 @@ def usage_rows(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return rows
 
 
-async def fetch_usage(username: str) -> dict[str, Any]:
+async def fetch_usage(username: str, *, is_admin: bool = False) -> dict[str, Any]:
     headers = {"Authorization": f"Bearer {API_KEY}"}
     page = 1
     rows: list[dict[str, Any]] = []
@@ -260,8 +263,13 @@ async def fetch_usage(username: str) -> dict[str, Any]:
                 break
             page += 1
 
-    rows = [row for row in rows if tag_belongs_to_user(str(row.get("tag") or ""), username)]
-    return {"ok": True, "items": rows, "username": username}
+    if not is_admin:
+        rows = [
+            row
+            for row in rows
+            if tag_belongs_to_user(str(row.get("tag") or ""), username)
+        ]
+    return {"ok": True, "items": rows, "username": username, "is_admin": is_admin}
 
 
 app = FastAPI(title="Key Usage")
@@ -307,6 +315,7 @@ async def login_submit(request: Request) -> JSONResponse:
         {
             "ok": True,
             "username": account["username"],
+            "is_admin": account["is_admin"],
         }
     )
 
@@ -360,7 +369,9 @@ async def usage(request: Request) -> JSONResponse:
             {"ok": False, "error": "请设置 MSK_API_KEY 环境变量"}, status_code=503
         )
     try:
-        result = await fetch_usage(account["username"])
+        result = await fetch_usage(
+            account["username"], is_admin=bool(account.get("is_admin"))
+        )
     except (httpx.RequestError, RuntimeError, ValueError):
         return JSONResponse({"ok": False, "error": "加载用量失败"}, status_code=502)
     return JSONResponse(result)
@@ -558,6 +569,7 @@ const feedback=document.getElementById('feedback');
 const usage=document.getElementById('usage');
 let allItems=[];
 let currentUsername='';
+let isAdmin=false;
 const placeholders={
   anthropic:'每行一个 sk-ant-... Key',
   anthropic_small:'每行一个 sk-ant-... Key (小额度)',
@@ -578,7 +590,8 @@ const badge=status=>{const cls=status==='开启'?'badge-on':status==='停用'?'b
 const tagPill=tag=>'<span class="tag" title="'+escapeHtml(tag)+'">'+escapeHtml(tag||'-')+'</span>';
 
 function applyAccountUI(){
-  userChip.textContent=currentUsername||'…';
+  if(!currentUsername){userChip.textContent='…';return;}
+  userChip.textContent=isAdmin?'管理员 '+currentUsername:currentUsername;
 }
 
 function uniqueTags(items){
@@ -609,6 +622,7 @@ async function loadMe(){
   const data=await response.json();
   if(!data.ok)throw new Error(data.error||'未登录');
   currentUsername=data.username||'';
+  isAdmin=!!data.is_admin;
   applyAccountUI();
 }
 
@@ -619,6 +633,7 @@ async function loadUsage(){
     const data=await response.json();
     if(!data.ok)throw new Error(data.error||'加载失败');
     if(data.username)currentUsername=data.username;
+    if(data.is_admin!==undefined)isAdmin=!!data.is_admin;
     applyAccountUI();
     allItems=data.items||[];
     renderTagFilter();
