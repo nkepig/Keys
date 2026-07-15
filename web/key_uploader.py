@@ -3,7 +3,7 @@ from __future__ import annotations
 import anyio
 import hmac
 import os
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any, Final
 
 import httpx
@@ -15,9 +15,9 @@ from starlette.middleware.sessions import SessionMiddleware
 API_KEY: Final = os.environ.get(
     "MSK_API_KEY", "msk_live_8499a96e4561ad3aa2b63ba3cc5a61505107db5a74a06a1b"
 )
-USERS: Final[dict[str, dict[str, Any]]] = {
-    "root": {"password": "1qazxsw2", "locked_tag": None},
-    "openai1": {"password": "asd12345", "locked_tag": "openai1"},
+USERS: Final[dict[str, str]] = {
+    "root": "1qazxsw2",
+    "openai1": "asd12345",
 }
 SESSION_SECRET: Final = os.environ.get(
     "KEY_APP_SECRET", "k7m2x9q4z8r1v6t3y0w5a8b2c6d4e7f9"
@@ -34,6 +34,7 @@ CATEGORIES: Final = {
 BATCH_SIZE: Final = 2000
 MAX_RETRIES: Final = 3
 TIMEOUT: Final = 60.0
+BJ_TZ: Final = timezone(timedelta(hours=8))
 
 
 def _cred_ok(given: str, expected: str) -> bool:
@@ -44,39 +45,41 @@ def _cred_ok(given: str, expected: str) -> bool:
 
 
 def authenticate(username: str, password: str) -> dict[str, Any] | None:
-    account = USERS.get(username)
-    if not account:
+    expected = USERS.get(username)
+    if expected is None:
         return None
-    if not _cred_ok(password, str(account["password"])):
+    if not _cred_ok(password, expected):
         return None
-    return {
-        "username": username,
-        "locked_tag": account.get("locked_tag"),
-    }
+    return {"username": username}
 
 
 def current_user(request: Request) -> dict[str, Any] | None:
     username = request.session.get("username")
     if not username or username not in USERS:
         return None
-    return {
-        "username": username,
-        "locked_tag": USERS[username].get("locked_tag"),
-    }
+    return {"username": username}
 
 
 class UploadRequest(BaseModel):
     model_config = ConfigDict(frozen=True)
     category: str = "openai"
     keys_text: str = ""
-    tag: str = ""
 
 
-def make_batch_tag(raw: str = "") -> str:
-    tag = raw.strip()
-    if tag:
-        return tag[:80]
-    return "batch-" + datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+def make_batch_tag(username: str) -> str:
+    safe = "".join(c for c in username.strip() if c.isalnum() or c in "_-")[:40]
+    if not safe:
+        safe = "user"
+    return f"{safe}-{datetime.now(BJ_TZ).strftime('%Y%m%d-%H%M%S')}"
+
+
+def tag_belongs_to_user(tag: str, username: str) -> bool:
+    """Match username-timestamp tags and legacy exact-username tags."""
+    if not tag or tag == "-":
+        return False
+    if tag == username:
+        return True
+    return tag.startswith(f"{username}-")
 
 
 def validate_key(key: str, category: str) -> bool:
@@ -156,13 +159,13 @@ async def post_batch(
     raise RuntimeError(last_error)
 
 
-async def upload_keys(text: str, category: str, tag: str = "") -> dict[str, Any]:
+async def upload_keys(text: str, category: str, username: str) -> dict[str, Any]:
     keys, invalid = clean_keys(text, category)
     if not keys:
         label = CATEGORIES.get(category, category)
         return {"ok": False, "error": f"请输入有效的 {label} Key"}
 
-    batch_tag = make_batch_tag(tag)
+    batch_tag = make_batch_tag(username)
     success = 0
     skipped = 0
     failed = 0
@@ -219,7 +222,7 @@ def usage_rows(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return rows
 
 
-async def fetch_usage(locked_tag: str | None = None) -> dict[str, Any]:
+async def fetch_usage(username: str) -> dict[str, Any]:
     headers = {"Authorization": f"Bearer {API_KEY}"}
     page = 1
     rows: list[dict[str, Any]] = []
@@ -257,9 +260,8 @@ async def fetch_usage(locked_tag: str | None = None) -> dict[str, Any]:
                 break
             page += 1
 
-    if locked_tag:
-        rows = [row for row in rows if row.get("tag") == locked_tag]
-    return {"ok": True, "items": rows, "locked_tag": locked_tag}
+    rows = [row for row in rows if tag_belongs_to_user(str(row.get("tag") or ""), username)]
+    return {"ok": True, "items": rows, "username": username}
 
 
 app = FastAPI(title="Key Usage")
@@ -305,7 +307,6 @@ async def login_submit(request: Request) -> JSONResponse:
         {
             "ok": True,
             "username": account["username"],
-            "locked_tag": account["locked_tag"],
         }
     )
 
@@ -342,9 +343,8 @@ async def upload(request: Request, body: UploadRequest) -> JSONResponse:
         return JSONResponse(
             {"ok": False, "error": "不支持的分类"}, status_code=400
         )
-    tag = account["locked_tag"] if account["locked_tag"] else body.tag
     try:
-        result = await upload_keys(body.keys_text, body.category, tag or "")
+        result = await upload_keys(body.keys_text, body.category, account["username"])
     except (httpx.RequestError, PermissionError, RuntimeError, ValueError) as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=502)
     return JSONResponse(result)
@@ -360,10 +360,9 @@ async def usage(request: Request) -> JSONResponse:
             {"ok": False, "error": "请设置 MSK_API_KEY 环境变量"}, status_code=503
         )
     try:
-        result = await fetch_usage(account.get("locked_tag"))
+        result = await fetch_usage(account["username"])
     except (httpx.RequestError, RuntimeError, ValueError):
         return JSONResponse({"ok": False, "error": "加载用量失败"}, status_code=502)
-    result["username"] = account["username"]
     return JSONResponse(result)
 
 
@@ -525,11 +524,7 @@ td.key{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-siz
             <option value="azure">Azure</option>
             <option value="ai_studio">AI Studio</option>
           </select>
-        </div>
-        <div class="field" id="tag-field">
-          <label for="tag">批次标签 Tag</label>
-          <input id="tag" type="text" maxlength="80" placeholder="留空自动生成 batch-时间戳" autocomplete="off">
-          <p class="hint" id="tag-hint">用于标记本批上传，可在用量列表筛选</p>
+          <p class="hint">批次 Tag 自动生成：用户名-时间戳</p>
         </div>
       </div>
       <label for="keys">上传 Key</label>
@@ -544,9 +539,9 @@ td.key{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-siz
     <div class="heading">
       <h2>用量</h2>
       <div class="filter" id="tag-filter-wrap">
-        <label for="tag-filter" class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">按 Tag 筛选</label>
-        <select id="tag-filter" aria-label="按 Tag 筛选">
-          <option value="">全部 Tag</option>
+        <label for="tag-filter" class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">按批次筛选</label>
+        <select id="tag-filter" aria-label="按批次筛选">
+          <option value="">全部批次</option>
         </select>
       </div>
     </div>
@@ -556,16 +551,12 @@ td.key{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-siz
 <script>
 const keys=document.getElementById('keys');
 const category=document.getElementById('category');
-const tagInput=document.getElementById('tag');
-const tagHint=document.getElementById('tag-hint');
 const tagFilter=document.getElementById('tag-filter');
-const tagFilterWrap=document.getElementById('tag-filter-wrap');
 const userChip=document.getElementById('user-chip');
 const upload=document.getElementById('upload');
 const feedback=document.getElementById('feedback');
 const usage=document.getElementById('usage');
 let allItems=[];
-let lockedTag=null;
 let currentUsername='';
 const placeholders={
   anthropic:'每行一个 sk-ant-... Key',
@@ -587,39 +578,25 @@ const badge=status=>{const cls=status==='开启'?'badge-on':status==='停用'?'b
 const tagPill=tag=>'<span class="tag" title="'+escapeHtml(tag)+'">'+escapeHtml(tag||'-')+'</span>';
 
 function applyAccountUI(){
-  userChip.textContent=currentUsername?(lockedTag?currentUsername+' · Tag 锁定':'管理员 '+currentUsername):'…';
-  if(lockedTag){
-    tagInput.value=lockedTag;
-    tagInput.readOnly=true;
-    tagInput.disabled=true;
-    tagHint.textContent='当前账号 Tag 已锁定为用户名，不可修改';
-    tagFilterWrap.style.display='none';
-  }else{
-    tagInput.readOnly=false;
-    tagInput.disabled=false;
-    if(!tagInput.value)tagInput.placeholder='留空自动生成 batch-时间戳';
-    tagHint.textContent='用于标记本批上传，可在用量列表筛选';
-    tagFilterWrap.style.display='';
-  }
+  userChip.textContent=currentUsername||'…';
 }
 
 function uniqueTags(items){
-  return [...new Set(items.map(item=>item.tag).filter(tag=>tag&&tag!=='-'))].sort();
+  return [...new Set(items.map(item=>item.tag).filter(tag=>tag&&tag!=='-'))].sort().reverse();
 }
 
 function renderTagFilter(selected=''){
-  if(lockedTag)return;
   const tags=uniqueTags(allItems);
   const current=selected||tagFilter.value||'';
-  tagFilter.innerHTML='<option value="">全部 Tag</option>'+tags.map(tag=>'<option value="'+escapeHtml(tag)+'">'+escapeHtml(tag)+'</option>').join('');
+  tagFilter.innerHTML='<option value="">全部批次</option>'+tags.map(tag=>'<option value="'+escapeHtml(tag)+'">'+escapeHtml(tag)+'</option>').join('');
   tagFilter.value=tags.includes(current)?current:'';
 }
 
 function renderUsage(){
-  const selected=lockedTag||tagFilter.value;
+  const selected=tagFilter.value;
   const items=selected?allItems.filter(item=>item.tag===selected):allItems;
   if(!items.length){
-    usage.innerHTML='<div class="state">'+(allItems.length?'当前 Tag 无数据':'暂无数据')+'</div>';
+    usage.innerHTML='<div class="state">'+(allItems.length?'当前批次无数据':'暂无数据')+'</div>';
     return;
   }
   usage.innerHTML='<table><thead><tr><th>Key</th><th>分类</th><th>Tag</th><th class="num">用量</th><th>状态</th><th>创建时间</th></tr></thead><tbody>'+
@@ -632,7 +609,6 @@ async function loadMe(){
   const data=await response.json();
   if(!data.ok)throw new Error(data.error||'未登录');
   currentUsername=data.username||'';
-  lockedTag=data.locked_tag||null;
   applyAccountUI();
 }
 
@@ -643,7 +619,6 @@ async function loadUsage(){
     const data=await response.json();
     if(!data.ok)throw new Error(data.error||'加载失败');
     if(data.username)currentUsername=data.username;
-    if(data.locked_tag!==undefined)lockedTag=data.locked_tag||null;
     applyAccountUI();
     allItems=data.items||[];
     renderTagFilter();
@@ -659,7 +634,7 @@ upload.addEventListener('click',async()=>{
   upload.disabled=true;
   upload.innerHTML='<span class="spinner"></span>上传中';
   try{
-    const response=await fetch('/api/upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({category:category.value,keys_text:keys.value,tag:lockedTag||tagInput.value.trim()})});
+    const response=await fetch('/api/upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({category:category.value,keys_text:keys.value})});
     const data=await response.json();
     if(!data.ok)throw new Error(data.error||'上传失败');
     feedback.className='feedback success';
@@ -671,7 +646,7 @@ upload.addEventListener('click',async()=>{
     feedback.textContent=parts.join(' · ');
     keys.value='';
     await loadUsage();
-    if(data.tag&&!lockedTag){
+    if(data.tag){
       tagFilter.value=data.tag;
       renderUsage();
     }
