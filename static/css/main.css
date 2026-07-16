@@ -312,8 +312,16 @@ body {
   min-width: 720px;
 }
 
+.channels-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
 .key-table thead th,
-.gap-table thead th {
+.gap-table thead th,
+.channels-table thead th {
   position: sticky;
   top: 0;
   z-index: 1;
@@ -340,8 +348,14 @@ body {
   text-align: right;
 }
 
+.channels-table thead th:nth-child(4),
+.channels-table tbody td:nth-child(4) {
+  text-align: right;
+}
+
 .key-table tbody td,
-.gap-table tbody td {
+.gap-table tbody td,
+.channels-table tbody td {
   padding: 16px 20px;
   border-bottom: 1px solid var(--color-border);
   vertical-align: middle;
@@ -363,7 +377,8 @@ body {
 }
 
 .key-table .row-item:hover td,
-.gap-table tbody tr:hover td {
+.gap-table tbody tr:hover td,
+.channels-table tbody tr:hover td {
   background: var(--color-surface-soft);
 }
 
@@ -372,7 +387,8 @@ body {
 }
 
 .key-table .row-item:last-child td,
-.gap-table tbody tr:last-child td {
+.gap-table tbody tr:last-child td,
+.channels-table tbody tr:last-child td {
   border-bottom: none;
 }
 

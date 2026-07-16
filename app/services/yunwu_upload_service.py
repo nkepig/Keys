@@ -1,4 +1,4 @@
-from typing import Final, TypedDict
+from typing import Any, Final, TypedDict
 
 import anyio
 from aiohttp import ClientError
@@ -18,6 +18,13 @@ CATEGORIES: Final = {
 BATCH_SIZE: Final = 2000
 MAX_RETRIES: Final = 3
 TIMEOUT: Final = 60.0
+
+
+def status_label(status: Any) -> str:
+    try:
+        return "开启" if int(status) == 1 else "禁用"
+    except (TypeError, ValueError):
+        return "禁用"
 
 
 class UpstreamData(TypedDict, total=False):
@@ -172,3 +179,75 @@ async def upload_keys(text: str, category: str) -> UploadSuccess | UploadFailure
         "invalid": local_invalid + api_invalid,
         "failed": failed,
     }
+
+
+def channel_rows(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for item in items:
+        key = item.get("key_masked") or "-"
+        raw_usage = item.get("used_quota", 0) or 0
+        try:
+            usage = float(raw_usage) / 500000
+        except (TypeError, ValueError):
+            usage = 0.0
+        status = status_label(item.get("status", 0))
+        category = str(item.get("category") or "-")
+        tag = str(item.get("tag") or "-")
+        created_raw = item.get("created_at", "")
+        created_at = created_raw[:19].replace("T", " ") if created_raw else "-"
+        rows.append(
+            {
+                "key": str(key),
+                "usage": usage,
+                "status": status,
+                "category": category,
+                "category_label": CATEGORIES.get(category, category),
+                "tag": tag,
+                "created_at": created_at,
+            }
+        )
+    return rows
+
+
+async def fetch_channels() -> dict[str, Any]:
+    """GET /openapi/v1/channels — list uploaded keys (paginated)."""
+    session = get_http_session()
+    headers = {"Authorization": f"Bearer {settings.msk_api_key}"}
+    page = 1
+    rows: list[dict[str, Any]] = []
+    base = settings.msk_base_url.rstrip("/")
+
+    while True:
+        body: dict[str, Any] | None = None
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                async with session.get(
+                    f"{base}/channels",
+                    headers=headers,
+                    params={"page": page, "page_size": 200},
+                    timeout=TIMEOUT,
+                ) as response:
+                    status = response.status
+                    if status == 429 or status >= 500:
+                        if attempt < MAX_RETRIES:
+                            await anyio.sleep(2 ** (attempt + 1))
+                            continue
+                    body = await response.json()
+                    break
+            except (ClientError, TimeoutError, ValueError) as exc:
+                if attempt >= MAX_RETRIES:
+                    raise UploadServiceError("加载渠道列表失败") from exc
+                await anyio.sleep(2 ** (attempt + 1))
+        if body is None:
+            raise UploadServiceError("加载渠道列表失败")
+        if body.get("code") != 0:
+            return {"ok": False, "error": "加载渠道列表失败", "items": []}
+        data = body.get("data", {}) or {}
+        items = data.get("items", []) or []
+        rows.extend(channel_rows(items))
+        total = data.get("total", len(rows))
+        if not items or len(rows) >= total:
+            break
+        page += 1
+
+    return {"ok": True, "items": rows, "total": len(rows)}

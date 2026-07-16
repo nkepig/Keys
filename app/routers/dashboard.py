@@ -10,6 +10,7 @@ from app.services.yunwu_upload_service import (
     UploadParameterError,
     UploadPermissionError,
     UploadServiceError,
+    fetch_channels,
     upload_keys,
 )
 from app.services.yunwu_service import get_service
@@ -58,4 +59,20 @@ async def yunwu_upload(body: MSKUploadRequest):
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result.get("error", "上传失败"))
+    return result
+
+
+@api_router.get("/channels")
+async def yunwu_channels():
+    """List keys already pushed via MSK OpenAPI /channels."""
+    if not settings.msk_api_key:
+        raise HTTPException(status_code=503, detail="请设置 MSK_API_KEY 环境变量")
+    try:
+        result = await fetch_channels()
+    except UploadServiceError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except (ClientError, RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=502, detail=f"获取渠道列表失败：{exc}") from exc
+    if not result.get("ok"):
+        raise HTTPException(status_code=502, detail=result.get("error", "加载渠道列表失败"))
     return result

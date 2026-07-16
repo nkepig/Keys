@@ -8,8 +8,22 @@ window.dashboardApp = function dashboardApp() {
     uploadFeedback: '',
     uploadFeedbackType: '',
 
+    channels: [],
+    channelsLoading: false,
+    tagFilter: '',
+
     get sortedGap() {
       return [...this.gap].sort((a, b) => (b.gap_rpm ?? 0) - (a.gap_rpm ?? 0));
+    },
+
+    get channelTags() {
+      const tags = [...new Set(this.channels.map((c) => c.tag).filter((t) => t && t !== '-'))];
+      return tags.sort().reverse();
+    },
+
+    get filteredChannels() {
+      if (!this.tagFilter) return this.channels;
+      return this.channels.filter((c) => c.tag === this.tagFilter);
     },
 
     fmt(n) {
@@ -19,20 +33,48 @@ window.dashboardApp = function dashboardApp() {
       return num.toLocaleString('en-US');
     },
 
-    async init() {
-      await this.fetchGap();
+    fmtUsage(n) {
+      const num = Number(n);
+      if (!Number.isFinite(num)) return '$0.00';
+      return (
+        '$' +
+        num.toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })
+      );
     },
 
-    async fetchGap() {
+    async init() {
+      await Promise.all([this.fetchGap({ quiet: true }), this.fetchChannels({ quiet: true })]);
+    },
+
+    async fetchGap({ quiet = false } = {}) {
       this.loading = true;
       try {
         const res = await KeysUI.apiFetch('/api/yunwu/gap');
         if (!res) return;
         const data = await res.json();
         this.gap = Array.isArray(data) ? data : [];
-        if (this.gap.length === 0) KeysUI.showToast('当前无缺口数据', 'success');
+        if (!quiet && this.gap.length === 0) KeysUI.showToast('当前无缺口数据', 'success');
       } finally {
         this.loading = false;
+      }
+    },
+
+    async fetchChannels({ quiet = false } = {}) {
+      this.channelsLoading = true;
+      try {
+        const res = await KeysUI.apiFetch('/api/yunwu/channels');
+        if (!res) return;
+        const data = await res.json();
+        this.channels = Array.isArray(data.items) ? data.items : [];
+        if (this.tagFilter && !this.channelTags.includes(this.tagFilter)) {
+          this.tagFilter = '';
+        }
+        if (!quiet && this.channels.length === 0) KeysUI.showToast('暂无已推送 Key', 'success');
+      } finally {
+        this.channelsLoading = false;
       }
     },
 
@@ -69,6 +111,8 @@ window.dashboardApp = function dashboardApp() {
         this.uploadFeedbackType = 'success';
         this.keysText = '';
         KeysUI.showToast(`成功推送 ${data.success} 个 Key`);
+        await this.fetchChannels({ quiet: true });
+        if (data.tag) this.tagFilter = data.tag;
       } catch {
         this.uploadFeedback = '推送失败，请稍后重试。';
         this.uploadFeedbackType = 'error';
