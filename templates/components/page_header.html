@@ -1,0 +1,13 @@
+{% macro page_header(title, description=None) %}
+<header data-ui="page-header" data-testid="page-header" class="mb-10 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+  <div class="min-w-0">
+    <h1 class="text-[32px] font-semibold leading-[1.15] tracking-tight text-ink">{{ title }}</h1>
+    {% if description %}
+    <p class="mt-2 max-w-2xl text-[15px] leading-relaxed text-ink-muted">{{ description }}</p>
+    {% endif %}
+  </div>
+  <div data-ui="page-actions" class="flex shrink-0 flex-wrap items-center gap-3">
+    {{ caller() if caller is defined else '' }}
+  </div>
+</header>
+{% endmacro %}

@@ -1,0 +1,117 @@
+{% set page_id = "dashboard" %}
+{% set page_title = "个人面板" %}
+{% extends "layout/app.html" %}
+{% from "components/page_header.html" import page_header %}
+
+{% block content %}
+<div x-data="dashboardApp" x-cloak>
+  {% call page_header(page_title) %}
+  {% endcall %}
+
+  <section class="panel-quiet overflow-hidden">
+    <div class="grid lg:grid-cols-2 lg:items-stretch">
+      <!-- Left: type + keys -->
+      <div class="flex flex-col border-b border-line lg:border-b-0 lg:border-r">
+        <div class="border-b border-line px-6 py-5 sm:px-7">
+          <h2 class="text-lg font-semibold tracking-tight text-ink">云雾 API</h2>
+        </div>
+        <form @submit.prevent="submitUpload" class="flex flex-1 flex-col gap-5 px-6 py-6 sm:px-7">
+          <div>
+            <label for="upload-category" class="mb-2 block text-[13px] font-medium text-ink">类型</label>
+            <select id="upload-category" data-testid="yunwu-category" x-model="uploadCategory" :disabled="uploading"
+                    class="h-control w-full rounded-control border border-line bg-surface px-3 text-sm text-ink outline-none transition-colors duration-fast ease-fluid focus:border-ink disabled:cursor-wait">
+              <option value="anthropic">Anthropic</option>
+              <option value="anthropic_small">Anthropic 小额度</option>
+              <option value="openai">OpenAI</option>
+              <option value="aws">AWS</option>
+              <option value="azure">Azure</option>
+              <option value="ai_studio">AI Studio</option>
+            </select>
+          </div>
+          <div class="flex min-h-0 flex-1 flex-col">
+            <label for="upload-keys" class="mb-2 block text-[13px] font-medium text-ink">密钥</label>
+            <textarea id="upload-keys" data-testid="yunwu-keys" x-model="keysText" :disabled="uploading" rows="8"
+                      aria-describedby="upload-keys-help"
+                      class="block min-h-[180px] w-full flex-1 resize-y rounded-control border border-line bg-surface px-3 py-2.5 text-sm leading-6 text-ink outline-none transition-colors duration-fast ease-fluid focus:border-ink disabled:cursor-wait"
+                      placeholder="每行一个 Key"></textarea>
+            <p id="upload-keys-help" class="mt-1.5 text-xs text-ink-subtle">每行一个 Key，Tag 自动使用当前时间戳</p>
+          </div>
+          <div class="mt-auto flex flex-wrap items-center justify-between gap-3 pt-1">
+            <p x-show="uploadFeedback" x-cloak data-testid="yunwu-feedback" aria-live="polite"
+               class="text-sm"
+               :class="uploadFeedbackType === 'error' ? 'text-danger' : 'text-success'"
+               x-text="uploadFeedback"></p>
+            <button type="submit" data-testid="yunwu-upload" :disabled="uploading"
+                    class="ui-press ml-auto inline-flex h-control min-w-[128px] items-center justify-center gap-2 rounded-control bg-accent px-5 text-sm font-medium text-white shadow-soft hover:bg-accent-hover disabled:cursor-wait disabled:opacity-55">
+              <span x-show="uploading" class="spin h-4 w-4 rounded-full border-2 border-white/40 border-t-white" aria-hidden="true"></span>
+              <span x-text="uploading ? '推送中' : '推送 Key'"></span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Right: gap table fills -->
+      <div class="relative flex min-h-[420px] flex-col">
+        <div class="flex items-center justify-between gap-3 border-b border-line px-6 py-5 sm:px-7">
+          <h2 class="text-base font-semibold tracking-tight text-ink">模型缺口</h2>
+          <button type="button" data-testid="yunwu-gap-refresh"
+                  @click="fetchGap()" :disabled="loading"
+                  class="ui-press inline-flex h-control shrink-0 items-center justify-center gap-2 rounded-control border border-line bg-surface px-4 text-sm font-medium text-ink hover:border-accent/30 hover:text-accent disabled:cursor-wait disabled:opacity-55">
+            <span x-show="loading" class="spin h-4 w-4 rounded-full border-2 border-line border-t-ink" aria-hidden="true"></span>
+            刷新
+          </button>
+        </div>
+
+        <div class="relative min-h-0 flex-1">
+          <div x-show="loading && gap.length === 0" class="flex h-full min-h-[320px] flex-col items-center justify-center gap-3">
+            <div class="spin h-6 w-6 rounded-full border-2 border-line border-t-ink"></div>
+            <p class="text-sm text-ink-muted">加载中…</p>
+          </div>
+
+          <div x-show="loading && gap.length > 0"
+               class="absolute inset-0 z-10 flex items-center justify-center bg-surface/80">
+            <div class="spin h-6 w-6 rounded-full border-2 border-line border-t-ink"></div>
+          </div>
+
+          <div x-show="!loading && gap.length === 0" class="flex h-full min-h-[320px] flex-col items-center justify-center gap-1 px-6 text-center">
+            <p class="text-sm font-medium text-ink">暂无缺口数据</p>
+            <p class="text-sm text-ink-muted">所有模型供给充足，或云雾接口暂未返回</p>
+          </div>
+
+          <div x-show="gap.length > 0" data-ui="table-scroller" class="table-scroller absolute inset-0 overflow-auto">
+            <table data-testid="yunwu-gap-table" class="gap-table">
+              <thead>
+                <tr>
+                  <th>模型</th>
+                  <th>渠道类型</th>
+                  <th>缺口 RPM</th>
+                  <th>缺口 TPM（估算）</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="(row, i) in sortedGap" :key="i">
+                  <tr>
+                    <td class="whitespace-nowrap">
+                      <span class="font-medium text-ink" x-text="row.model_name || '—'"></span>
+                    </td>
+                    <td class="whitespace-nowrap text-ink-muted"
+                        x-text="row.channel_type_name || row.channel_type || '—'"></td>
+                    <td class="numeric whitespace-nowrap text-ink"
+                        x-text="fmt(row.gap_rpm)"></td>
+                    <td class="numeric whitespace-nowrap text-ink-muted"
+                        x-text="fmt(row.gap_tpm_est)"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/dashboard.js"></script>
+{% endblock %}

@@ -15,7 +15,7 @@ if __package__ in (None, ""):
 from app.config import settings
 from app.db import init_db
 from app.http_client import close_http_client, init_http_client
-from app.routers import auth, key
+from app.routers import auth, dashboard, key
 
 
 @asynccontextmanager
@@ -75,6 +75,8 @@ async def general_exc_handler(request: Request, exc: Exception):
 app.include_router(auth.router)
 app.include_router(key.router)
 app.include_router(key.api_router)
+app.include_router(dashboard.router)
+app.include_router(dashboard.api_router)
 
 
 @app.get("/")

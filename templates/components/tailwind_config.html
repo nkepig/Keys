@@ -1,0 +1,80 @@
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          canvas: '#f4f4f5',
+          surface: {
+            DEFAULT: '#ffffff',
+            soft: '#fafafa',
+            muted: '#f0f0f2',
+            strong: '#e8e8eb',
+          },
+          ink: {
+            DEFAULT: '#0a0a0a',
+            muted: '#6b6b70',
+            subtle: '#9a9aa0',
+          },
+          line: {
+            DEFAULT: '#e6e6ea',
+            strong: '#d0d0d6',
+          },
+          accent: {
+            DEFAULT: '#0a0a0a',
+            hover: '#2a2a2a',
+            soft: '#f0f0f2',
+          },
+          success: '#15803d',
+          warning: '#b45309',
+          danger: '#b91c1c',
+          info: '#1d4ed8',
+        },
+        fontFamily: {
+          sans: ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Text"', '"Segoe UI"', '"PingFang SC"', '"Microsoft YaHei"', 'sans-serif'],
+          mono: ['ui-monospace', 'SFMono-Regular', '"SF Mono"', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+        },
+        borderRadius: {
+          shell: '16px',
+          panel: '14px',
+          control: '10px',
+          compact: '7px',
+        },
+        boxShadow: {
+          ambient: '0 12px 40px rgba(0, 0, 0, 0.06)',
+          soft: '0 1px 2px rgba(0, 0, 0, 0.04)',
+        },
+        maxWidth: {
+          narrow: '420px',
+        },
+        minHeight: {
+          control: '44px',
+          compact: '36px',
+        },
+        height: {
+          control: '44px',
+          compact: '36px',
+        },
+        width: {
+          'icon-action': '40px',
+        },
+        transitionTimingFunction: {
+          fluid: 'cubic-bezier(0.22, 1, 0.36, 1)',
+        },
+        transitionDuration: {
+          fast: '160ms',
+          base: '240ms',
+          slow: '360ms',
+        },
+        zIndex: {
+          sticky: '20',
+          dropdown: '40',
+          overlay: '60',
+          modal: '70',
+          toast: '90',
+          tooltip: '100',
+        },
+      },
+    },
+  };
+</script>

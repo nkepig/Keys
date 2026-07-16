@@ -96,10 +96,17 @@ def db_insert_key(
     tier: str | None,
     models_json: str | None,
     status_code: int | None,
-) -> Key:
+    notes: str | None = None,
+) -> Key | None:
     with Session(engine) as session:
+        session.connection().exec_driver_sql("BEGIN IMMEDIATE")
+        existing = session.exec(select(Key).where(Key.key == key)).first()
+        if existing is not None:
+            session.rollback()
+            return None
         obj = Key(provider=provider, key=key, origin=origin,
-                  tier=tier, models=models_json, status_code=status_code)
+                  tier=tier, models=models_json, status_code=status_code,
+                  notes=notes)
         session.add(obj)
         session.commit()
         session.refresh(obj)
@@ -255,7 +262,11 @@ def _mask_key(key: str) -> str:
     return f"{key[:6]}•••{key[-4:]}" if len(key) > 10 else "••••••••"
 
 
-async def process_key(raw_key: str, origin: str | None = None) -> dict:
+async def process_key(
+    raw_key: str,
+    origin: str | None = None,
+    notes: str | None = None,
+) -> dict:
     """识别供应商 → 校验 → 保存。重复检查由上层 batch_process_keys 负责。"""
     provider, clean_key = detect_provider_and_key(raw_key)
     if not clean_key or not provider:
@@ -277,8 +288,22 @@ async def process_key(raw_key: str, origin: str | None = None) -> dict:
             models_json = json.dumps(model_list, ensure_ascii=False)
 
     saved = await asyncio.to_thread(
-        db_insert_key, provider, clean_key, origin, tier_val, models_json, status_code
+        db_insert_key,
+        provider,
+        clean_key,
+        origin,
+        tier_val,
+        models_json,
+        status_code,
+        notes,
     )
+    if saved is None:
+        return {
+            "id": None, "key": _mask_key(clean_key), "provider": provider,
+            "status_code": status_code, "tier": tier_val, "models_count": 0,
+            "status_detail": "skipped_existing",
+            "saved": False, "error": "已存在，跳过",
+        }
     return {
         "id": saved.id, "key": _mask_key(clean_key), "provider": provider,
         "status_code": status_code, "tier": tier_val,
@@ -312,7 +337,11 @@ async def batch_process_keys(
             k = item.get("key", "").strip()
             if k and k not in seen:
                 seen.add(k)
-                rows.append({"key": k, "origin": item.get("origin", origin)})
+                rows.append({
+                    "key": k,
+                    "origin": item.get("origin", origin),
+                    "notes": item.get("notes"),
+                })
 
     if not rows:
         return []
@@ -346,7 +375,7 @@ async def batch_process_keys(
         for i in range(0, total_verify, concurrent):
             batch = to_verify[i : i + concurrent]
             batch_results = await gather_limited(
-                [process_key(r["key"], r["origin"]) for r in batch],
+                [process_key(r["key"], r["origin"], r.get("notes")) for r in batch],
                 concurrent=len(batch),
             )
             verify_results.extend(batch_results)
