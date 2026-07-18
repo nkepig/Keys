@@ -11,8 +11,9 @@ from app.services import key_service
 from app.services import scanner_service
 from app.services.llm.claude import ClaudeService
 from app.services.llm.gemini import GeminiService
-from app.services.llm.openai import OpenAIService, XAIService
+from app.services.llm.openai import OpenAIService
 from app.services.llm.openrouter import OpenRouterService
+from app.services.llm.xai_service import XAIService
 
 router = APIRouter(prefix="/keys", tags=["keys"])
 api_router = APIRouter(prefix="/api", tags=["api"])

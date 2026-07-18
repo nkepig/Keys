@@ -19,8 +19,9 @@ from app.db import engine
 from app.models.key import Key
 from app.services.llm.claude import ClaudeService
 from app.services.llm.gemini import GeminiService
-from app.services.llm.openai import OpenAIService, XAIService
+from app.services.llm.openai import OpenAIService
 from app.services.llm.openrouter import OpenRouterService
+from app.services.llm.xai_service import XAIService
 from app.utils.concurrency import gather_limited
 
 # ── 供应商识别规则 ────────────────────────────────────────────────────────────
