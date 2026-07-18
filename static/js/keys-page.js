@@ -63,7 +63,7 @@ window.keysApp = function keysApp() {
 		},
 		get invalidCount() {
 			return this.keys.filter(
-				(k) => k.status_code != null && k.status_code !== 200,
+				(k) => k.status_code !== null && k.status_code !== 200,
 			).length;
 		},
 		get providerOptions() {
@@ -115,7 +115,7 @@ window.keysApp = function keysApp() {
 					result = result.filter(
 						(k) =>
 							pinnedIds.has(k.id) ||
-							(k.status_code != null &&
+							(k.status_code !== null &&
 								![200, 400, 401, 403, 429, 503].includes(k.status_code)),
 					);
 				} else {
@@ -183,7 +183,7 @@ window.keysApp = function keysApp() {
 		},
 		get paginatedDisplayRows() {
 			return this.paginatedKeys.map((k) =>
-				this.verifyCache[k.id] != null
+				this.verifyCache[k.id] !== null
 					? { ...k, ...this.verifyCache[k.id] }
 					: k,
 			);
@@ -327,7 +327,7 @@ window.keysApp = function keysApp() {
 			if (code === 404) return "badge badge-neutral";
 			if (code === 429) return "badge badge-warn";
 			if (code === 503) return "badge badge-info";
-			if (code != null) return "badge badge-neutral";
+			if (code !== null) return "badge badge-neutral";
 			return "badge badge-neutral";
 		},
 		modelsCount(str) {
@@ -353,7 +353,7 @@ window.keysApp = function keysApp() {
 			}
 		},
 		fmtVerifyBody(body) {
-			if (body == null) return "";
+			if (body === null) return "";
 			if (typeof body === "string") return body;
 			try {
 				return JSON.stringify(body, null, 2);
@@ -480,24 +480,24 @@ window.keysApp = function keysApp() {
 		},
 		openModal(editMode, item = null) {
 			this.isEditing = !!editMode;
-			const next =
-				editMode && item
-					? {
-							id: item.id,
-							provider: item.provider || "",
-							key: item.key || "",
-							origin: item.origin || "",
-							tier: item.tier != null ? String(item.tier) : "",
-							notes: item.notes || "",
-						}
-					: {
-							id: null,
-							provider: "",
-							key: "",
-							origin: "",
-							tier: "",
-							notes: "",
-						};
+			let next = {
+				id: null,
+				provider: "",
+				key: "",
+				origin: "",
+				tier: "",
+				notes: "",
+			};
+			if (editMode && item) {
+				next = {
+					id: item.id,
+					provider: item.provider || "",
+					key: item.key || "",
+					origin: item.origin || "",
+					tier: item.tier === null ? "" : String(item.tier),
+					notes: item.notes || "",
+				};
+			}
 			this.form.id = next.id;
 			this.form.provider = next.provider;
 			this.form.key = next.key;
@@ -627,7 +627,7 @@ window.keysApp = function keysApp() {
 			this.batchRunning = true;
 			try {
 				const items = this.paginatedDisplayRows.filter(
-					(item) => item && item.id != null && !this.verifyingMap[item.id],
+					(item) => item && item.id !== null && !this.verifyingMap[item.id],
 				);
 				if (items.length === 0) return;
 				const selectedModel = this.batchVerifyModel.trim();
