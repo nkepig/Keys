@@ -13,6 +13,7 @@ from app.services.llm.claude import ClaudeService
 from app.services.llm.gemini import GeminiService
 from app.services.llm.openai import OpenAIService
 from app.services.llm.openrouter import OpenRouterService
+from app.services.llm.xai_service import XAIService
 
 router = APIRouter(prefix="/keys", tags=["keys"])
 api_router = APIRouter(prefix="/api", tags=["api"])
@@ -23,6 +24,7 @@ PROVIDER_SERVICES = {
     "Anthropic": ClaudeService,
     "Google": GeminiService,
     "OpenRouter": OpenRouterService,
+    "xAI": XAIService,
 }
 
 
@@ -83,7 +85,12 @@ async def upload_keys(body: KeyUpload):
         body.keys, origin=body.origin, concurrent=body.concurrent
     )
     saved = sum(1 for r in results if r["saved"])
-    return {"total": len(results), "saved": saved, "failed": len(results) - saved, "results": results}
+    return {
+        "total": len(results),
+        "saved": saved,
+        "failed": len(results) - saved,
+        "results": results,
+    }
 
 
 @api_router.post("/keys/batch_urls")
@@ -97,7 +104,11 @@ async def batch_urls(body: UrlBatchRequest):
     scan_results = await scanner_service.scan_urls(urls, concurrent=40)
 
     # Prepare payloads for the existing save/verify pipeline: {key, origin}
-    to_save = [{"key": r.get("key"), "origin": r.get("url")} for r in scan_results if r.get("key") and r.get("url")]
+    to_save = [
+        {"key": r.get("key"), "origin": r.get("url")}
+        for r in scan_results
+        if r.get("key") and r.get("url")
+    ]
 
     # Persist discovered keys through the existing pipeline
     results = await key_service.batch_process_keys(to_save)
@@ -156,7 +167,9 @@ async def verify_key(key_id: int, body: Optional[KeyVerify] = None):
 
     if status_code == 200:
         model_list = await key_service.fetch_models_for(key.provider, key.key)
-        update_data["models"] = _json.dumps(model_list, ensure_ascii=False) if model_list else None
+        update_data["models"] = (
+            _json.dumps(model_list, ensure_ascii=False) if model_list else None
+        )
     else:
         # 非 200 时清除旧模型列表，避免残留
         update_data["models"] = None

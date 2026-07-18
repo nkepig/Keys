@@ -5,6 +5,7 @@ Key 服务
   db_*      纯数据库操作（同步），通过 asyncio.to_thread 在线程池中运行
   业务函数   组合 db_* + LLM 校验，对外暴露 async 接口
 """
+
 import asyncio
 import json
 import re
@@ -12,7 +13,7 @@ import re
 import aiohttp
 from loguru import logger
 
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from app.db import engine
 from app.models.key import Key
@@ -20,6 +21,7 @@ from app.services.llm.claude import ClaudeService
 from app.services.llm.gemini import GeminiService
 from app.services.llm.openai import OpenAIService
 from app.services.llm.openrouter import OpenRouterService
+from app.services.llm.xai_service import XAIService
 from app.utils.concurrency import gather_limited
 
 # ── 供应商识别规则 ────────────────────────────────────────────────────────────
@@ -51,6 +53,7 @@ _COMPILED_RULES: list[tuple[str, re.Pattern[str]]] = [
 ]
 
 # ── 供应商识别工具 ────────────────────────────────────────────────────────────
+
 
 def detect_provider_and_key(raw_text: str | None) -> tuple[str | None, str | None]:
     """从原始文本中识别供应商并提取 key，未匹配返回 (None, None)。"""
@@ -89,6 +92,7 @@ def _normalize_key_data(data: dict) -> dict:
 
 # ── DB 操作层（同步，通过 asyncio.to_thread 调用）─────────────────────────────
 
+
 def db_insert_key(
     provider: str,
     key: str,
@@ -104,9 +108,15 @@ def db_insert_key(
         if existing is not None:
             session.rollback()
             return None
-        obj = Key(provider=provider, key=key, origin=origin,
-                  tier=tier, models=models_json, status_code=status_code,
-                  notes=notes)
+        obj = Key(
+            provider=provider,
+            key=key,
+            origin=origin,
+            tier=tier,
+            models=models_json,
+            status_code=status_code,
+            notes=notes,
+        )
         session.add(obj)
         session.commit()
         session.refresh(obj)
@@ -121,7 +131,9 @@ def db_get_existing_keys(keys: list[str], chunk_size: int = 500) -> frozenset[st
     with Session(engine) as session:
         for i in range(0, len(keys), chunk_size):
             chunk = keys[i : i + chunk_size]
-            found.update(session.exec(select(Key.key).where(Key.key.in_(chunk))).all())
+            found.update(
+                session.exec(select(Key.key).where(col(Key.key).in_(chunk))).all()
+            )
     return frozenset(found)
 
 
@@ -135,7 +147,7 @@ def db_get_all_keys(provider: str | None = None) -> list[Key]:
         stmt = select(Key)
         if provider:
             stmt = stmt.where(Key.provider == provider)
-        return session.exec(stmt).all()
+        return list(session.exec(stmt).all())
 
 
 def db_upsert_key(data: dict) -> Key:
@@ -187,16 +199,18 @@ def db_delete_key(key_id: int) -> bool:
 # ── LLM 校验层 ───────────────────────────────────────────────────────────────
 
 _VERIFY_SERVICES = {
-    "OpenAI":     OpenAIService,
-    "Anthropic":  ClaudeService,
-    "Google":     GeminiService,
+    "OpenAI": OpenAIService,
+    "Anthropic": ClaudeService,
+    "Google": GeminiService,
     "OpenRouter": OpenRouterService,
+    "xAI": XAIService,
 }
 
 _MODEL_FETCHERS = {
-    "OpenAI":    OpenAIService.fetch_models,
+    "OpenAI": OpenAIService.fetch_models,
     "Anthropic": ClaudeService.fetch_models,
-    "Google":    GeminiService.fetch_models,
+    "Google": GeminiService.fetch_models,
+    "xAI": XAIService.fetch_models,
 }
 
 
@@ -258,6 +272,7 @@ async def fetch_models_for(provider: str, key: str) -> list[str]:
 
 # ── 业务层 ───────────────────────────────────────────────────────────────────
 
+
 def _mask_key(key: str) -> str:
     return f"{key[:6]}•••{key[-4:]}" if len(key) > 10 else "••••••••"
 
@@ -271,10 +286,15 @@ async def process_key(
     provider, clean_key = detect_provider_and_key(raw_key)
     if not clean_key or not provider:
         return {
-            "id": None, "key": None, "provider": None,
-            "status_code": None, "tier": None, "models_count": 0,
+            "id": None,
+            "key": None,
+            "provider": None,
+            "status_code": None,
+            "tier": None,
+            "models_count": 0,
             "status_detail": "unrecognized_provider_or_key",
-            "saved": False, "error": "无法识别供应商或 key",
+            "saved": False,
+            "error": "无法识别供应商或 key",
         }
 
     result = await verify_key(provider, clean_key)
@@ -282,8 +302,10 @@ async def process_key(
     tier_val = str(result["tier"]) if result["tier"] is not None else None
 
     models_json: str | None = None
+    models_count = 0
     if status_code == 200:
         model_list = await fetch_models_for(provider, clean_key)
+        models_count = len(model_list)
         if model_list:
             models_json = json.dumps(model_list, ensure_ascii=False)
 
@@ -299,17 +321,26 @@ async def process_key(
     )
     if saved is None:
         return {
-            "id": None, "key": _mask_key(clean_key), "provider": provider,
-            "status_code": status_code, "tier": tier_val, "models_count": 0,
+            "id": None,
+            "key": _mask_key(clean_key),
+            "provider": provider,
+            "status_code": status_code,
+            "tier": tier_val,
+            "models_count": 0,
             "status_detail": "skipped_existing",
-            "saved": False, "error": "已存在，跳过",
+            "saved": False,
+            "error": "已存在，跳过",
         }
     return {
-        "id": saved.id, "key": _mask_key(clean_key), "provider": provider,
-        "status_code": status_code, "tier": tier_val,
-        "models_count": len(json.loads(models_json)) if models_json else 0,
+        "id": saved.id,
+        "key": _mask_key(clean_key),
+        "provider": provider,
+        "status_code": status_code,
+        "tier": tier_val,
+        "models_count": models_count,
         "status_detail": result.get("status_detail"),
-        "saved": True, "error": None,
+        "saved": True,
+        "error": None,
     }
 
 
@@ -328,7 +359,9 @@ async def batch_process_keys(
     if isinstance(items, str):
         rows = [
             {"key": line, "origin": origin}
-            for line in dict.fromkeys(l.strip() for l in items.splitlines() if l.strip())
+            for line in dict.fromkeys(
+                line.strip() for line in items.splitlines() if line.strip()
+            )
         ]
     else:
         seen: set[str] = set()
@@ -337,17 +370,21 @@ async def batch_process_keys(
             k = item.get("key", "").strip()
             if k and k not in seen:
                 seen.add(k)
-                rows.append({
-                    "key": k,
-                    "origin": item.get("origin", origin),
-                    "notes": item.get("notes"),
-                })
+                rows.append(
+                    {
+                        "key": k,
+                        "origin": item.get("origin", origin),
+                        "notes": item.get("notes"),
+                    }
+                )
 
     if not rows:
         return []
 
     logger.info("去重后 {} 条密钥，正在查询库内已存在记录...", len(rows))
-    candidate_keys = [ck for _, ck in (detect_provider_and_key(r["key"]) for r in rows) if ck]
+    candidate_keys = [
+        ck for _, ck in (detect_provider_and_key(r["key"]) for r in rows) if ck
+    ]
     existing = await asyncio.to_thread(db_get_existing_keys, candidate_keys)
 
     skip_results: list[dict] = []
@@ -355,19 +392,28 @@ async def batch_process_keys(
     for row in rows:
         _, clean_key = detect_provider_and_key(row["key"])
         if clean_key and clean_key in existing:
-            skip_results.append({
-                "id": None, "key": _mask_key(clean_key), "provider": None,
-                "status_code": None, "tier": None, "models_count": 0,
-                "status_detail": "skipped_existing",
-                "saved": False, "error": "已存在，跳过",
-            })
+            skip_results.append(
+                {
+                    "id": None,
+                    "key": _mask_key(clean_key),
+                    "provider": None,
+                    "status_code": None,
+                    "tier": None,
+                    "models_count": 0,
+                    "status_detail": "skipped_existing",
+                    "saved": False,
+                    "error": "已存在，跳过",
+                }
+            )
         else:
             to_verify.append(row)
 
     total_verify = len(to_verify)
     logger.info(
         "库内已存在 {} 条，待校验 {} 条，并发数: {}",
-        len(skip_results), total_verify, concurrent,
+        len(skip_results),
+        total_verify,
+        concurrent,
     )
 
     verify_results: list[dict] = []
@@ -383,7 +429,10 @@ async def batch_process_keys(
             saved_so_far = sum(1 for r in verify_results if r.get("saved"))
             logger.info(
                 "校验进度: {}/{} (本批 {} 条，累计入库 {})",
-                done, total_verify, len(batch), saved_so_far,
+                done,
+                total_verify,
+                len(batch),
+                saved_so_far,
             )
 
     saved = sum(1 for r in verify_results if r.get("saved"))
@@ -392,6 +441,7 @@ async def batch_process_keys(
 
 
 # ── 公开 CRUD 接口 ────────────────────────────────────────────────────────────
+
 
 async def get_keys(provider: str | None = None) -> list[Key]:
     return await asyncio.to_thread(db_get_all_keys, provider)
@@ -416,7 +466,9 @@ async def update_keys(updates: list[dict] | dict, concurrent: int = 20) -> list[
         key_id = d.get("id")
         if key_id is None:
             raise ValueError("update_keys 的每项 dict 必须包含 'id'")
-        return await asyncio.to_thread(db_update_key, key_id, {k: v for k, v in d.items() if k != "id"})
+        return await asyncio.to_thread(
+            db_update_key, key_id, {k: v for k, v in d.items() if k != "id"}
+        )
 
     return await gather_limited([_one(d) for d in items], concurrent=concurrent)
 
