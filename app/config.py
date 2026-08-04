@@ -22,13 +22,13 @@ class Settings(BaseSettings):
     smtp_password: str = "qsnfekjysybykiav"
     email_recipients: list[str] = Field(default_factory=_default_email_recipients)
 
-    yunwu_base_url: str = "https://gys.oljjio.click"
+    yunwu_base_url: str = "https://gys.oljuxj.xyz"
     yunwu_username: str = ""
     yunwu_password: str = ""
     yunwu_gap_path: str = "/api/model-gaps"
 
     msk_api_key: str = ""
-    msk_base_url: str = "https://gys.oljjio.click/openapi/v1"
+    msk_base_url: str = "https://gys.oljuxj.xyz/openapi/v1"
 
 
 settings = Settings()
