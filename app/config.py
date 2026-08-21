@@ -7,7 +7,7 @@ def _default_email_recipients() -> list[str]:
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     app_name: str = "Key Manager"
     debug: bool = False
