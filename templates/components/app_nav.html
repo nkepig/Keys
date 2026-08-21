@@ -15,10 +15,6 @@
        class="nav-link inline-flex min-h-control items-center px-3 text-sm
               {% if page_id == 'keys' %}font-semibold{% else %}font-medium text-ink-muted hover:text-ink{% endif %}"
        {% if page_id == 'keys' %}aria-current="page"{% endif %}>密钥管理</a>
-    <a href="/dashboard" data-testid="nav-dashboard"
-       class="nav-link inline-flex min-h-control items-center px-3 text-sm
-              {% if page_id == 'dashboard' %}font-semibold{% else %}font-medium text-ink-muted hover:text-ink{% endif %}"
-       {% if page_id == 'dashboard' %}aria-current="page"{% endif %}>个人面板</a>
     <span class="mx-2 h-4 w-px bg-line" aria-hidden="true"></span>
     <button type="button" data-testid="nav-logout" onclick="KeysUI.logout()"
             class="ui-press inline-flex min-h-control items-center rounded-control px-3 text-sm font-medium text-ink-muted hover:bg-surface-muted hover:text-ink">
@@ -36,8 +32,6 @@
      class="mb-8 rounded-panel border border-line bg-surface/90 p-2 shadow-soft backdrop-blur md:hidden">
   <a href="/keys" class="flex min-h-control items-center rounded-control px-4 text-sm font-medium
      {% if page_id == 'keys' %}bg-surface-muted text-ink{% else %}text-ink-muted{% endif %}">密钥管理</a>
-  <a href="/dashboard" class="flex min-h-control items-center rounded-control px-4 text-sm font-medium
-     {% if page_id == 'dashboard' %}bg-surface-muted text-ink{% else %}text-ink-muted{% endif %}">个人面板</a>
   <button type="button" onclick="KeysUI.logout()"
           class="flex w-full min-h-control items-center rounded-control px-4 text-left text-sm font-medium text-ink-muted">退出</button>
 </div>

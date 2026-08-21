@@ -41,8 +41,8 @@ async def main():
         query_templates: list[tuple[str, str]] = [
             ("openai", '(body="sk-" || body="OPENAI_API_KEY") && after="{date}"'),
             ("openai2", 'body="sk-proj-" && after="{date}"'),
-            ("claude", '(body="sk-ant-" || body="ANTHROPIC_API_KEY") && after="{date}"'),
-            ("claude2", 'body="claude" && after="{date}"'),
+            # ("claude", '(body="sk-ant-" || body="ANTHROPIC_API_KEY") && after="{date}"'),
+            # ("claude2", 'body="claude" && after="{date}"'),
             ("gemini", '(body="AIzaSy" || body="GEMINI_API_KEY") && after="{date}"'),
             ("gemini2", '(body="googleapis" || body="generativelanguage") && after="{date}"'),
         ]
