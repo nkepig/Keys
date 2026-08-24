@@ -44,7 +44,7 @@ async def main():
             # ("claude", '(body="sk-ant-" || body="ANTHROPIC_API_KEY") && after="{date}"'),
             # ("claude2", 'body="claude" && after="{date}"'),
             ("gemini", '(body="AIzaSy" || body="GEMINI_API_KEY") && after="{date}"'),
-            ("gemini2", '(body="googleapis" || body="generativelanguage") && after="{date}"'),
+            # ("gemini2", '(body="googleapis" || body="generativelanguage") && after="{date}"'),
         ]
 
         pruned = prune_scan_history(window_days=SCAN_HISTORY_WINDOW_DAYS)
@@ -77,7 +77,7 @@ async def main():
                 )
                 break
 
-            date = (datetime.now() - timedelta(days=random.randint(1, 100))).strftime("%Y-%m-%d")
+            date = (datetime.now() - timedelta(days=random.randint(1, 180))).strftime("%Y-%m-%d")
             name, tmpl = random.choice(query_templates)
             query = tmpl.format(date=date) if "{date}" in tmpl else tmpl
             raw_hosts = await fofa_search(query, size=fofa_size)
