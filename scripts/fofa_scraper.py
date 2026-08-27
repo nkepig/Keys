@@ -37,38 +37,43 @@ async def main():
     verify_concurrent = 80
 
     try:
-        # 密钥前缀/环境变量 AND 泄露现场特征（API host、env 赋值、SDK），避免只搜品牌名命中新闻站
+        # 密钥前缀 / 环境变量 / 官方接口 path 全部 OR，仅 after 用 AND 限时间
         query_templates: list[tuple[str, str]] = [
             (
                 "openai",
-                '(body="sk-" || body="OPENAI_API_KEY") && '
-                '(body="api.openai.com" || body="openai.api_key" || body="OPENAI_API_KEY=" || '
-                'body="sk-svcacct-" || body="OPENAI_BASE_URL" || body="/v1/chat/completions") && '
-                'after="{date}"',
+                '(body="sk-" || body="OPENAI_API_KEY" || body="openai.api_key" || '
+                'body="OPENAI_API_KEY=" || body="sk-svcacct-" || body="OPENAI_BASE_URL" || '
+                'body="OPENAI_API_BASE" || body="api.openai.com" || body="api.openai.com/v1" || '
+                'body="https://api.openai.com" || body="/v1/chat/completions" || '
+                'body="/v1/responses" || body="/v1/embeddings" || body="openai.azure.com" || '
+                'body="AZURE_OPENAI_ENDPOINT") && after="{date}"',
             ),
             (
                 "openai2",
-                'body="sk-proj-" && '
-                '(body="OPENAI_API_KEY" || body="api.openai.com" || body="openai.api_key" || '
-                'body="OPENAI_BASE_URL" || body="Bearer sk-") && '
-                'after="{date}"',
+                '(body="sk-proj-" || body="OPENAI_API_KEY" || body="openai.api_key" || '
+                'body="OPENAI_BASE_URL" || body="OPENAI_API_BASE" || body="Bearer sk-" || '
+                'body="api.openai.com" || body="api.openai.com/v1" || '
+                'body="/v1/chat/completions" || body="/v1/responses") && after="{date}"',
             ),
             # ("claude", '(body="sk-ant-" || body="ANTHROPIC_API_KEY") && after="{date}"'),
             # ("claude2", 'body="claude" && after="{date}"'),
             (
                 "gemini",
-                '(body="AIzaSy" || body="GEMINI_API_KEY") && '
-                '(body="generativelanguage" || body="googleapis.com/v1beta" || body="GOOGLE_API_KEY" || '
-                'body="GEMINI_API_KEY=" || body="GoogleGenerativeAI" || body="genai.configure") && '
-                'after="{date}"',
+                '(body="AIzaSy" || body="GEMINI_API_KEY" || body="GOOGLE_API_KEY" || '
+                'body="GEMINI_API_KEY=" || body="GoogleGenerativeAI" || body="genai.configure" || '
+                'body="generativelanguage" || body="generativelanguage.googleapis.com" || '
+                'body="googleapis.com/v1beta" || body="/v1beta/models" || '
+                'body=":generateContent" || body="streamGenerateContent" || '
+                'body="generativelanguage.googleapis.com/v1beta/openai") && after="{date}"',
             ),
             # ("gemini2", '(body="googleapis" || body="generativelanguage") && after="{date}"'),
             (
                 "xai",
-                '(body="xai-" || body="XAI_API_KEY") && '
-                '(body="api.x.ai" || body="XAI_API_KEY=" || body="XAI_API_BASE" || '
-                'body="x.ai/v1" || body="grok-4.6") && '
-                'after="{date}"',
+                '(body="xai-" || body="XAI_API_KEY" || body="XAI_API_KEY=" || '
+                'body="XAI_API_BASE" || body="XAI_BASE_URL" || body="api.x.ai" || '
+                'body="api.x.ai/v1" || body="https://api.x.ai" || body="x.ai/v1" || '
+                'body="api.x.ai/v1/chat/completions" || body="api.x.ai/v1/responses" || '
+                'body="grok-4.6") && after="{date}"',
             ),
         ]
 
