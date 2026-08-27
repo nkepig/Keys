@@ -37,14 +37,39 @@ async def main():
     verify_concurrent = 80
 
     try:
-        # 宽泛查询（无时间限制）+ 少量近期查询；避免过多细分模板导致反复命中空结果
+        # 密钥前缀/环境变量 AND 泄露现场特征（API host、env 赋值、SDK），避免只搜品牌名命中新闻站
         query_templates: list[tuple[str, str]] = [
-            ("openai", '(body="sk-" || body="OPENAI_API_KEY") && after="{date}"'),
-            ("openai2", 'body="sk-proj-" && after="{date}"'),
+            (
+                "openai",
+                '(body="sk-" || body="OPENAI_API_KEY") && '
+                '(body="api.openai.com" || body="openai.api_key" || body="OPENAI_API_KEY=" || '
+                'body="sk-svcacct-" || body="OPENAI_BASE_URL" || body="/v1/chat/completions") && '
+                'after="{date}"',
+            ),
+            (
+                "openai2",
+                'body="sk-proj-" && '
+                '(body="OPENAI_API_KEY" || body="api.openai.com" || body="openai.api_key" || '
+                'body="OPENAI_BASE_URL" || body="Bearer sk-") && '
+                'after="{date}"',
+            ),
             # ("claude", '(body="sk-ant-" || body="ANTHROPIC_API_KEY") && after="{date}"'),
             # ("claude2", 'body="claude" && after="{date}"'),
-            ("gemini", '(body="AIzaSy" || body="GEMINI_API_KEY") && after="{date}"'),
+            (
+                "gemini",
+                '(body="AIzaSy" || body="GEMINI_API_KEY") && '
+                '(body="generativelanguage" || body="googleapis.com/v1beta" || body="GOOGLE_API_KEY" || '
+                'body="GEMINI_API_KEY=" || body="GoogleGenerativeAI" || body="genai.configure") && '
+                'after="{date}"',
+            ),
             # ("gemini2", '(body="googleapis" || body="generativelanguage") && after="{date}"'),
+            (
+                "xai",
+                '(body="xai-" || body="XAI_API_KEY") && '
+                '(body="api.x.ai" || body="XAI_API_KEY=" || body="XAI_API_BASE" || '
+                'body="x.ai/v1" || body="grok-4.6") && '
+                'after="{date}"',
+            ),
         ]
 
         pruned = prune_scan_history(window_days=SCAN_HISTORY_WINDOW_DAYS)
